@@ -1,0 +1,267 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 780" width="960" height="780">
+  <style>
+    text { font-family: 'Hiragino Sans GB', 'Heiti SC', 'STSong', 'Arial Unicode MS', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+  </style>
+  <defs>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#059669"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#7c3aed"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#ea580c"/>
+    </marker>
+    <marker id="arrow-gray" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#6b7280"/>
+    </marker>
+    <filter id="shadow" x="-4%" y="-4%" width="108%" height="108%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="960" height="780" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="480" y="32" text-anchor="middle" fill="#111827" font-size="18" font-weight="600">DSP (Data Serving Platform) 系统架构图</text>
+  <text x="480" y="50" text-anchor="middle" fill="#6b7280" font-size="11">MySQL 兼容分布式分析查询引擎 · 10+ 模块 · 单向分层依赖</text>
+
+  <!-- ==================== LAYER 1: Client / Protocol ==================== -->
+  <rect x="40" y="65" width="880" height="100" rx="6" fill="#eff6ff" fill-opacity="0.3" stroke="#bfdbfe" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="56" y="82" fill="#2563eb" font-size="10" font-weight="600" letter-spacing="0.06em">CLIENT LAYER · 客户端接入层</text>
+
+  <!-- MySQL Client (user icon) -->
+  <circle cx="130" cy="105" r="10" fill="#dbeafe" stroke="#93c5fd" stroke-width="1.2"/>
+  <path d="M116,127 Q116,115 130,115 Q144,115 144,127" fill="#dbeafe" stroke="#93c5fd" stroke-width="1.2"/>
+  <text x="130" y="143" text-anchor="middle" fill="#111827" font-size="12" font-weight="600">MySQL Client</text>
+  <text x="130" y="156" text-anchor="middle" fill="#6b7280" font-size="10">mysql-client / JDBC</text>
+
+  <!-- Arrows: Client → Protocol -->
+  <line x1="130" y1="158" x2="130" y2="195" stroke="#2563eb" stroke-width="1.8" marker-end="url(#arrow-blue)"/>
+  <text x="138" y="180" fill="#2563eb" font-size="9">MySQL Protocol</text>
+
+  <!-- ==================== LAYER 2: dsp-protocol ==================== -->
+  <rect x="40" y="195" width="880" height="105" rx="6" fill="#fff7ed" fill-opacity="0.3" stroke="#fed7aa" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="56" y="212" fill="#ea580c" font-size="10" font-weight="600" letter-spacing="0.06em">PROTOCOL LAYER · 协议层 (dsp-protocol)</text>
+
+  <!-- Netty Server -->
+  <rect x="60" y="222" width="140" height="60" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5" filter="url(#shadow)"/>
+  <circle cx="90" cy="245" r="10" fill="#4479A1"/>
+  <text x="90" y="249" text-anchor="middle" fill="white" font-size="8" font-weight="700">N</text>
+  <text x="140" y="244" text-anchor="middle" fill="#111827" font-size="13" font-weight="600">Netty Server</text>
+  <text x="140" y="260" text-anchor="middle" fill="#6b7280" font-size="10">MySQL 协议编解码</text>
+  <text x="140" y="274" text-anchor="middle" fill="#6b7280" font-size="10">认证 / 命令解析</text>
+
+  <!-- Command Handler -->
+  <rect x="220" y="222" width="140" height="60" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="290" y="248" text-anchor="middle" fill="#111827" font-size="13" font-weight="600">Command Handler</text>
+  <text x="290" y="264" text-anchor="middle" fill="#6b7280" font-size="10">COM_QUERY / COM_PING</text>
+  <text x="290" y="278" text-anchor="middle" fill="#6b7280" font-size="10">结果集封装</text>
+
+  <!-- Result Serializer -->
+  <rect x="380" y="222" width="140" height="60" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="450" y="248" text-anchor="middle" fill="#111827" font-size="13" font-weight="600">Result Serializer</text>
+  <text x="450" y="264" text-anchor="middle" fill="#6b7280" font-size="10">Row → MySQL Packet</text>
+  <text x="450" y="278" text-anchor="middle" fill="#6b7280" font-size="10">EOF / OK Packet</text>
+
+  <!-- Internal arrow: Netty → Command → Serializer -->
+  <line x1="200" y1="252" x2="218" y2="252" stroke="#ea580c" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+  <line x1="360" y1="252" x2="378" y2="252" stroke="#ea580c" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+
+  <!-- Arrow: Protocol → Engine -->
+  <line x1="290" y1="282" x2="290" y2="328" stroke="#2563eb" stroke-width="1.8" marker-end="url(#arrow-blue)"/>
+  <text x="298" y="308" fill="#2563eb" font-size="9">SQL → Engine</text>
+
+  <!-- Arrow: Protocol → Storage (Lucene) -->
+  <path d="M520,252 L640,252 L640,508" stroke="#059669" stroke-width="1.5" fill="none" marker-end="url(#arrow-green)"/>
+  <text x="650" y="380" fill="#059669" font-size="9">scan/append</text>
+
+  <!-- ==================== LAYER 3: dsp-engine ==================== -->
+  <rect x="40" y="328" width="880" height="145" rx="6" fill="#f0fdf4" fill-opacity="0.3" stroke="#bbf7d0" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="56" y="345" fill="#059669" font-size="10" font-weight="600" letter-spacing="0.06em">ENGINE LAYER · 执行引擎层 (dsp-engine / dsp-runtime)</text>
+
+  <!-- SlothParser (Calcite) -->
+  <rect x="60" y="358" width="130" height="55" rx="8" fill="#faf5ff" stroke="#c4b5fd" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="63" y="361" width="124" height="49" rx="6" fill="none" stroke="#c4b5fd" stroke-width="0.8" opacity="0.5"/>
+  <text x="125" y="381" text-anchor="middle" fill="#111827" font-size="12" font-weight="600">SlothParser</text>
+  <text x="125" y="396" text-anchor="middle" fill="#6b7280" font-size="10">SQL → SqlNode → RelNode</text>
+  <text x="125" y="408" text-anchor="middle" fill="#6b7280" font-size="9">Apache Calcite 1.32</text>
+
+  <!-- RBO Optimizer -->
+  <rect x="210" y="358" width="130" height="55" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="275" y="381" text-anchor="middle" fill="#111827" font-size="12" font-weight="600">RBO (HepPlanner)</text>
+  <text x="275" y="396" text-anchor="middle" fill="#6b7280" font-size="10">常量折叠 / 谓词下推</text>
+  <text x="275" y="408" text-anchor="middle" fill="#6b7280" font-size="9">列裁剪 / 规则优化</text>
+
+  <!-- CBO Optimizer -->
+  <rect x="360" y="358" width="130" height="55" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="425" y="381" text-anchor="middle" fill="#111827" font-size="12" font-weight="600">CBO (Volcano)</text>
+  <text x="425" y="396" text-anchor="middle" fill="#6b7280" font-size="10">代价估算 / Join 顺序</text>
+  <text x="425" y="408" text-anchor="middle" fill="#6b7280" font-size="9">TableScan 选择</text>
+
+  <!-- Operator Chain -->
+  <rect x="510" y="358" width="390" height="55" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="705" y="376" text-anchor="middle" fill="#111827" font-size="12" font-weight="600">Operator Chain · 物理执行算子链</text>
+  <!-- Scan -->
+  <rect x="524" y="386" width="72" height="20" rx="4" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+  <text x="560" y="400" text-anchor="middle" fill="#2563eb" font-size="10" font-weight="600">TableScan</text>
+  <!-- Filter -->
+  <rect x="604" y="386" width="62" height="20" rx="4" fill="#fef2f2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="635" y="400" text-anchor="middle" fill="#dc2626" font-size="10" font-weight="600">Filter</text>
+  <!-- Project -->
+  <rect x="674" y="386" width="68" height="20" rx="4" fill="#f0fdf4" stroke="#86efac" stroke-width="1"/>
+  <text x="708" y="400" text-anchor="middle" fill="#16a34a" font-size="10" font-weight="600">Project</text>
+  <!-- Join -->
+  <rect x="750" y="386" width="60" height="20" rx="4" fill="#faf5ff" stroke="#c4b5fd" stroke-width="1"/>
+  <text x="780" y="400" text-anchor="middle" fill="#7c3aed" font-size="10" font-weight="600">Join</text>
+  <!-- Aggregate -->
+  <rect x="818" y="386" width="72" height="20" rx="4" fill="#fff7ed" stroke="#fed7aa" stroke-width="1"/>
+  <text x="854" y="400" text-anchor="middle" fill="#ea580c" font-size="10" font-weight="600">Aggregate</text>
+
+  <!-- Arrows: Parser → RBO → CBO → Operators -->
+  <line x1="190" y1="385" x2="208" y2="385" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+  <line x1="340" y1="385" x2="358" y2="385" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+  <line x1="490" y1="385" x2="508" y2="385" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+
+  <!-- Conversion Rule: Converter Rule box -->
+  <rect x="60" y="422" width="170" height="36" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1" filter="url(#shadow)"/>
+  <text x="145" y="438" text-anchor="middle" fill="#111827" font-size="11" font-weight="600">SlothConverterRule</text>
+  <text x="145" y="452" text-anchor="middle" fill="#6b7280" font-size="9">RelNode → Operator</text>
+  <!-- Convention badge -->
+  <rect x="245" y="422" width="120" height="36" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1" filter="url(#shadow)"/>
+  <text x="305" y="438" text-anchor="middle" fill="#111827" font-size="11" font-weight="600">SlothConvention</text>
+  <text x="305" y="452" text-anchor="middle" fill="#6b7280" font-size="9">TraitSet 转换</text>
+
+  <line x1="230" y1="440" x2="243" y2="440" stroke="#7c3aed" stroke-width="1.2" marker-end="url(#arrow-purple)"/>
+
+  <!-- ==================== LAYER 4: Storage API + Core ==================== -->
+  <rect x="40" y="490" width="280" height="130" rx="6" fill="#faf5ff" fill-opacity="0.3" stroke="#e9d5ff" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="56" y="507" fill="#7c3aed" font-size="10" font-weight="600" letter-spacing="0.06em">API LAYER · 存储抽象层 (dsp-storage-api / dsp-core)</text>
+
+  <!-- StorageEngine interface -->
+  <rect x="60" y="520" width="120" height="44" rx="8" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="120" y="538" text-anchor="middle" fill="#7c3aed" font-size="12" font-weight="700">&lt;&lt;interface&gt;&gt;</text>
+  <text x="120" y="554" text-anchor="middle" fill="#111827" font-size="12" font-weight="600">StorageEngine</text>
+
+  <!-- MetadataStore interface -->
+  <rect x="195" y="520" width="110" height="44" rx="8" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="250" y="538" text-anchor="middle" fill="#7c3aed" font-size="12" font-weight="700">&lt;&lt;interface&gt;&gt;</text>
+  <text x="250" y="554" text-anchor="middle" fill="#111827" font-size="12" font-weight="600">MetadataStore</text>
+
+  <!-- Core data types -->
+  <rect x="60" y="575" width="245" height="34" rx="6" fill="#f0fdf4" stroke="#86efac" stroke-width="1" filter="url(#shadow)"/>
+  <text x="182" y="596" text-anchor="middle" fill="#111827" font-size="11" font-weight="600">dsp-core: Value · Row · Block · DataType</text>
+
+  <!-- Arrow: Core → Storage API -->
+  <line x1="120" y1="575" x2="120" y2="573" stroke="#7c3aed" stroke-width="1.2"/>
+  <line x1="250" y1="575" x2="250" y2="573" stroke="#7c3aed" stroke-width="1.2"/>
+
+  <!-- ==================== LAYER 5: Storage Implementations ==================== -->
+  <rect x="340" y="490" width="580" height="130" rx="6" fill="#f0fdf4" fill-opacity="0.3" stroke="#bbf7d0" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="356" y="507" fill="#059669" font-size="10" font-weight="600" letter-spacing="0.06em">STORAGE LAYER · 存储实现层 (dsp-storage)</text>
+
+  <!-- Lucene Storage (cylinder) -->
+  <ellipse cx="420" cy="530" rx="50" ry="10" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <rect x="370" y="530" width="100" height="35" fill="#dcfce7" stroke="none"/>
+  <line x1="370" y1="530" x2="370" y2="565" stroke="#16a34a" stroke-width="1.5"/>
+  <line x1="470" y1="530" x2="470" y2="565" stroke="#16a34a" stroke-width="1.5"/>
+  <ellipse cx="420" cy="565" rx="50" ry="10" fill="#bbf7d0" stroke="#16a34a" stroke-width="1.5"/>
+  <!-- Inner rings for vector store feel -->
+  <ellipse cx="420" cy="543" rx="50" ry="8" fill="none" stroke="#16a34a" stroke-width="0.5" opacity="0.4"/>
+  <text x="420" y="553" text-anchor="middle" fill="#111827" font-size="11" font-weight="600">LuceneStorage</text>
+  <text x="420" y="586" text-anchor="middle" fill="#6b7280" font-size="9">IndexWriter / SearcherManager</text>
+
+  <!-- RocksDB Storage -->
+  <rect x="500" y="525" width="110" height="40" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="555" y="545" text-anchor="middle" fill="#111827" font-size="12" font-weight="600">RocksDBStorage</text>
+  <text x="555" y="559" text-anchor="middle" fill="#6b7280" font-size="9">KV 存储引擎 (骨架)</text>
+
+  <!-- MySQL Storage -->
+  <rect x="625" y="525" width="110" height="40" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5" filter="url(#shadow)"/>
+  <circle cx="645" cy="545" r="10" fill="#4479A1"/>
+  <text x="645" y="549" text-anchor="middle" fill="white" font-size="7" font-weight="700">M</text>
+  <text x="690" y="545" text-anchor="middle" fill="#111827" font-size="12" font-weight="600">MySQLStorage</text>
+  <text x="690" y="559" text-anchor="middle" fill="#6b7280" font-size="9">元数据存储</text>
+
+  <!-- EngineRegistry -->
+  <rect x="755" y="525" width="150" height="40" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="830" y="545" text-anchor="middle" fill="#2563eb" font-size="12" font-weight="600">EngineRegistry</text>
+  <text x="830" y="559" text-anchor="middle" fill="#6b7280" font-size="9">动态注册 / 工厂模式</text>
+
+  <!-- Arrows: Interface → Implementations -->
+  <line x1="180" y1="542" x2="368" y2="542" stroke="#059669" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <text x="260" y="536" fill="#059669" font-size="9">implements</text>
+
+  <line x1="180" y1="542" x2="498" y2="545" stroke="#059669" stroke-width="1.2" stroke-dasharray="4,2" marker-end="url(#arrow-green)"/>
+  <line x1="180" y1="542" x2="623" y2="545" stroke="#059669" stroke-width="1.2" stroke-dasharray="4,2" marker-end="url(#arrow-green)"/>
+
+  <!-- Arrow: Engine Registry ↔ Storage Engines -->
+  <line x1="753" y1="545" x2="713" y2="545" stroke="#2563eb" stroke-width="1.2" marker-end="url(#arrow-blue)"/>
+  <line x1="753" y1="540" x2="612" y2="540" stroke="#2563eb" stroke-width="1" stroke-dasharray="3,2"/>
+  <line x1="753" y1="540" x2="472" y2="535" stroke="#2563eb" stroke-width="1" stroke-dasharray="3,2"/>
+
+  <!-- Schema Adapter boxes -->
+  <rect x="60" y="590" width="80" height="22" rx="4" fill="#ffffff" stroke="#d1d5db" stroke-width="1"/>
+  <text x="100" y="605" text-anchor="middle" fill="#6b7280" font-size="9">file-schema</text>
+  <rect x="148" y="590" width="80" height="22" rx="4" fill="#ffffff" stroke="#d1d5db" stroke-width="1"/>
+  <text x="188" y="605" text-anchor="middle" fill="#6b7280" font-size="9">hive-schema</text>
+
+  <!-- ==================== LAYER 6: Cluster / Distributed ==================== -->
+  <rect x="40" y="635" width="880" height="68" rx="6" fill="#fef2f2" fill-opacity="0.3" stroke="#fecaca" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="56" y="652" fill="#dc2626" font-size="10" font-weight="600" letter-spacing="0.06em">CLUSTER LAYER · 分布式协调层 (dsp-raft / dsp-register)</text>
+
+  <!-- Raft Consensus -->
+  <polygon points="175,680 210,660 245,680 210,700" fill="#fef2f2" stroke="#dc2626" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="210" y="684" text-anchor="middle" fill="#dc2626" font-size="11" font-weight="600">Raft</text>
+  <text x="210" y="718" text-anchor="middle" fill="#6b7280" font-size="9">共识协议</text>
+
+  <!-- gRPC Communication -->
+  <rect x="280" y="665" width="130" height="34" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="345" y="687" text-anchor="middle" fill="#111827" font-size="12" font-weight="600">gRPC 通信</text>
+
+  <!-- Register Center -->
+  <rect x="430" y="665" width="140" height="34" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="500" y="687" text-anchor="middle" fill="#111827" font-size="12" font-weight="600">注册中心</text>
+  <text x="500" y="718" text-anchor="middle" fill="#6b7280" font-size="9">节点注册 / 心跳</text>
+
+  <!-- Node boxes -->
+  <rect x="600" y="665" width="80" height="34" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1"/>
+  <text x="640" y="687" text-anchor="middle" fill="#111827" font-size="11">Node A</text>
+  <rect x="695" y="665" width="80" height="34" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1"/>
+  <text x="735" y="687" text-anchor="middle" fill="#111827" font-size="11">Node B</text>
+  <rect x="790" y="665" width="80" height="34" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1"/>
+  <text x="830" y="687" text-anchor="middle" fill="#111827" font-size="11">Node C</text>
+
+  <!-- Arrows: Raft ↔ gRPC ↔ Register ↔ Nodes -->
+  <line x1="245" y1="680" x2="278" y2="682" stroke="#dc2626" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+  <line x1="410" y1="682" x2="428" y2="682" stroke="#dc2626" stroke-width="1.2" marker-end="url(#arrow-orange)"/>
+  <line x1="570" y1="682" x2="598" y2="682" stroke="#6b7280" stroke-width="1.2" marker-end="url(#arrow-gray)"/>
+  <line x1="680" y1="682" x2="693" y2="682" stroke="#6b7280" stroke-width="1" stroke-dasharray="4,2"/>
+  <line x1="775" y1="682" x2="788" y2="682" stroke="#6b7280" stroke-width="1" stroke-dasharray="4,2"/>
+
+  <!-- DDL Proto -->
+  <rect x="280" y="700" width="130" height="22" rx="4" fill="#fef2f2" stroke="#fca5a5" stroke-width="0.8"/>
+  <text x="345" y="715" text-anchor="middle" fill="#dc2626" font-size="9">Ddl.proto / Register.proto</text>
+
+  <!-- ==================== LEGEND ==================== -->
+  <g transform="translate(40, 720)">
+    <text x="0" y="10" fill="#111827" font-size="10" font-weight="600">LEGEND:</text>
+    <line x1="60" y1="6" x2="90" y2="6" stroke="#2563eb" stroke-width="1.8" marker-end="url(#arrow-blue)"/>
+    <text x="96" y="10" fill="#6b7280" font-size="10">主要请求流</text>
+    <line x1="170" y1="6" x2="200" y2="6" stroke="#059669" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+    <text x="206" y="10" fill="#6b7280" font-size="10">数据读写流</text>
+    <line x1="280" y1="6" x2="310" y2="6" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+    <text x="316" y="10" fill="#6b7280" font-size="10">转换/优化流</text>
+    <line x1="400" y1="6" x2="430" y2="6" stroke="#dc2626" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+    <text x="436" y="10" fill="#6b7280" font-size="10">控制/协议流</text>
+    <line x1="520" y1="6" x2="550" y2="6" stroke="#6b7280" stroke-width="1.2" stroke-dasharray="4,2" marker-end="url(#arrow-gray)"/>
+    <text x="556" y="10" fill="#6b7280" font-size="10">异步/心跳</text>
+  </g>
+
+  <!-- Version tag -->
+  <text x="920" y="770" text-anchor="end" fill="#d1d5db" font-size="9">DSP v1.0-SNAPSHOT · Generated by fireworks-tech-graph</text>
+</svg>

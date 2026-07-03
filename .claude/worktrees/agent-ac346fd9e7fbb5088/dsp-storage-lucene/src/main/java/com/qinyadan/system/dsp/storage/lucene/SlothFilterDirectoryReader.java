@@ -1,0 +1,45 @@
+package com.qinyadan.system.dsp.storage.lucene;
+
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.FilterDirectoryReader;
+import org.apache.lucene.index.LeafReader;
+
+import java.io.IOException;
+
+/**
+ * Filters directory readers to wrap leaf readers with shard-aware
+ * ElasticsearchLeafReader instances.
+ */
+public class SlothFilterDirectoryReader extends FilterDirectoryReader {
+
+    private final FilterDirectoryReader.SubReaderWrapper wrapper;
+
+    public SlothFilterDirectoryReader(DirectoryReader in, SubReaderWrapper wrapper) throws IOException {
+        super(in, wrapper);
+        this.wrapper = wrapper;
+    }
+
+    @Override
+    protected DirectoryReader doWrapDirectoryReader(DirectoryReader in) throws IOException {
+        return new SlothFilterDirectoryReader(in, (SubReaderWrapper) wrapper);
+    }
+
+    @Override
+    public CacheHelper getReaderCacheHelper() {
+        return in.getReaderCacheHelper();
+    }
+
+    static final class SubReaderWrapper extends FilterDirectoryReader.SubReaderWrapper {
+
+        private final int shardId;
+
+        SubReaderWrapper(int shardId) {
+            this.shardId = shardId;
+        }
+
+        @Override
+        public LeafReader wrap(LeafReader reader) {
+            return new ElasticsearchLeafReader(reader, shardId);
+        }
+    }
+}

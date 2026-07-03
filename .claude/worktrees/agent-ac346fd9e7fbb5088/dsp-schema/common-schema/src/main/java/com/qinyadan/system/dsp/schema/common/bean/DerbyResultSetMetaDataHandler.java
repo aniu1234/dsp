@@ -1,0 +1,37 @@
+package com.qinyadan.system.dsp.schema.common.bean;
+
+import com.qinyadan.system.dsp.schema.common.util.JavaTypeToSqlTypeConversion;
+import com.qinyadan.system.dsp.schema.common.util.ReflectionUtils;
+import org.apache.derby.impl.jdbc.EmbedResultSet;
+import org.apache.derby.impl.jdbc.EmbedResultSet42;
+import org.apache.derby.impl.sql.GenericResultDescription;
+
+import java.lang.reflect.Field;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+
+
+public class DerbyResultSetMetaDataHandler implements MetaDataHandler<EmbedResultSet42> {
+
+    /**
+     * For derby result set
+     */
+    private static final Field EMBED_RESULT_SET =
+            ReflectionUtils.getField(EmbedResultSet.class, "resultDescription");
+
+    @Override
+    public List<Class> getColumnType(EmbedResultSet42 resultSet) throws IllegalAccessException {
+        final GenericResultDescription resultDesc = (GenericResultDescription) EMBED_RESULT_SET.get(resultSet);
+        return Arrays.stream(resultDesc.getColumnInfo())
+                .map(d -> d.getType().getTypeId().getSQLTypeName())
+                .map(JavaTypeToSqlTypeConversion::getJavaTypeBySqlType)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<String> getColumnName(EmbedResultSet42 resultSet) throws IllegalAccessException {
+        final GenericResultDescription resultDesc = (GenericResultDescription) EMBED_RESULT_SET.get(resultSet);
+        return Arrays.stream(resultDesc.getColumnInfo()).map(d -> d.getName()).collect(Collectors.toList());
+    }
+}

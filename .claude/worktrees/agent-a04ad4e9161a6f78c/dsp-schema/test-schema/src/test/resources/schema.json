@@ -1,0 +1,33 @@
+{
+  "version": "1.0",
+  "defaultSchema": "csv",
+  "schemas": [
+    {
+      "name": "csv",
+      "type": "custom",
+      "factory": "com.qinyadan.system.dsp.schema.file.csv.CsvFileSchemaFactory",
+      "operand": {
+        "directory": "csv"
+      }
+    },
+    {
+      "name": "json",
+      "type": "custom",
+      "factory": "com.qinyadan.system.dsp.schema.file.json.JsonFileSchemaFactory",
+      "operand": {
+        "directory": "json"
+      }
+    },
+    {
+      "name": "test",
+      "type": "custom",
+      "factory": "com.qinyadan.system.dsp.schema.mysql.MysqlSchemaFactory",
+      "operand": {
+        "url": "jdbc:mysql://127.0.0.1/test",
+        "username": "root",
+        "password": "qinyadan",
+        "schema": "test"
+      }
+    }
+  ]
+}
