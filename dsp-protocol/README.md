@@ -12,19 +12,19 @@
 项目地址: [待定](https://www.baidu.com),
 欢迎小伙伴们一起参加
 
-目前正在进行中
-
-- 数据持久化(表数据持久化已完成, 表元数据todo中)与存储优化
-- 支持插入语法与功能(done)
-- 列类型丰富
+目前仍在进行分布式能力、存储优化与列类型扩展。
 
 ### 2.如何启动该数据库
 
 #### 2.1. 准备元数据数据库
 
-本项目采用MySQL存放元数据, 建表语句如下:
+本项目可以使用 MySQL 存放元数据，通过环境变量配置：
 
-启动数据库，并替换MySQL相应的配置, 请参考`MysqlConnection`
+```bash
+export DSP_META_JDBC_URL='jdbc:mysql://127.0.0.1:3306/sloth'
+export DSP_META_JDBC_USERNAME='sloth'
+export DSP_META_JDBC_PASSWORD='change-me'
+```
 
 **说明:**
 **如果没有配置MySQL用来存储元数据, 所有的db、table数据均存放在内存之中，无法
@@ -40,11 +40,21 @@ mvn clean package
 
 ##### 2.3.1 本地调试
 
+启动前必须配置登录账号密码；未配置时服务会拒绝所有登录：
+
+```bash
+export DSP_AUTH_USERNAME='root'
+export DSP_AUTH_PASSWORD='change-me'
+export DSP_DATA_DIR="$HOME/.dsp/data"
+# 可选，默认 3016
+export DSP_SERVER_PORT='3016'
+```
+
 在IDE中找到`FrontEndMain`, 直接启动main函数即可
 
 ##### 2.3.2 服务部署
 
-打包项目后， 解压mysql-protocol-1.0-SNAPSHOT-RELEASE.tar.gz, 执行:
+打包项目后，解压 `dsp-protocol-1.0-SNAPSHOT-RELEASE.tar.gz`，执行：
 
 - `bin/dsp.sh start` 启动
 - `bin/dsp.sh stop` 停止
@@ -53,15 +63,11 @@ mvn clean package
 
 #### 3.1 连接地址
 
-```sql
- mysql
--h127.0.0.1 -uroot -psxx -P3016
+```bash
+mysql -h127.0.0.1 -uroot -p -P3016 --ssl-mode=disabled
 ```
-
-目前没有对用户名与密码进行验证，任何用户名与密码登陆都没有问题
 
 #### 3.2 使用范例
 
 
  
-

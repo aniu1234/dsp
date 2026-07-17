@@ -1,50 +1,36 @@
 package com.qinyadan.system.dsp.schema.common.util;
 
-import com.google.common.collect.Maps;
-import com.mysql.cj.jdbc.result.ResultSetImpl;
-import com.qinyadan.system.dsp.schema.common.bean.CalciteResultSetMetaDataHandler;
-import com.qinyadan.system.dsp.schema.common.bean.DerbyResultSetMetaDataHandler;
-import com.qinyadan.system.dsp.schema.common.bean.JdbcResultSetMetaDataHandler;
-import com.qinyadan.system.dsp.schema.common.bean.MetaDataHandler;
-import org.apache.calcite.jdbc.CalciteResultSet;
-import org.apache.derby.impl.jdbc.EmbedResultSet42;
+import com.google.common.collect.Lists;
 
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Map;
 
 
 public class ResultSetUtils {
 
-    private static final Map<Class, MetaDataHandler> META_DATA_HANDLER_MAP
-            = Maps.newHashMap();
-
-    static {
-        META_DATA_HANDLER_MAP.put(CalciteResultSet.class, new CalciteResultSetMetaDataHandler());
-        META_DATA_HANDLER_MAP.put(ResultSetImpl.class, new JdbcResultSetMetaDataHandler());
-        META_DATA_HANDLER_MAP.put(EmbedResultSet42.class, new DerbyResultSetMetaDataHandler());
+    public static List<Class> getColumnTypeFromResultSet(ResultSet resultSet) throws SQLException {
+        ResultSetMetaData metadata = resultSet.getMetaData();
+        List<Class> types = Lists.newArrayListWithCapacity(metadata.getColumnCount());
+        for (int index = 1; index <= metadata.getColumnCount(); index++) {
+            String className = metadata.getColumnClassName(index);
+            try {
+                types.add(Class.forName(className));
+            } catch (ClassNotFoundException e) {
+                types.add(String.class);
+            }
+        }
+        return types;
     }
 
-    public static List<Class> getColumnTypeFromResultSet(ResultSet resultSet) throws IllegalAccessException {
-
-        final MetaDataHandler<ResultSet> handler = META_DATA_HANDLER_MAP.get(resultSet.getClass());
-        //unsupport yet
-        if (null == handler) {
-            throw new UnsupportedOperationException("Do not support " + resultSet.getClass().getSimpleName() + " now...");
+    public static List<String> getColumnNameFromResultSet(ResultSet resultSet) throws SQLException {
+        ResultSetMetaData metadata = resultSet.getMetaData();
+        List<String> names = Lists.newArrayListWithCapacity(metadata.getColumnCount());
+        for (int index = 1; index <= metadata.getColumnCount(); index++) {
+            names.add(metadata.getColumnLabel(index));
         }
-
-        return handler.getColumnType(resultSet);
-    }
-
-    public static List<String> getColumnNameFromResultSet(ResultSet resultSet) throws IllegalAccessException {
-        final MetaDataHandler<ResultSet> handler = META_DATA_HANDLER_MAP.get(resultSet.getClass());
-        //unsupport yet
-        if (null == handler) {
-            throw new UnsupportedOperationException("Do not support " + resultSet.getClass().getSimpleName() + " now...");
-        }
-
-        return handler.getColumnName(resultSet);
+        return names;
     }
 
     public static String javaTypeToString(ResultSet rs, int index, Class<?> clzz) throws SQLException {

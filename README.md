@@ -10,12 +10,8 @@
 dsp (parent)
 ├── dsp-core              # 数据模型层：DataType、Value、Row、Block、Column
 ├── dsp-storage-api       # 存储抽象层：StorageEngine、Query、EngineRegistry
-├── dsp-runtime           # 执行引擎（Calcite 集成、表达式/函数体系）
-├── dsp-storage/
-│   ├── base-storage      # 存储核心实现（Calcite parser、Lucene 引擎、元数据）
-│   ├── lucene-storage    # Lucene 存储扩展
-│   ├── rocksdb-storage   # RocksDB 存储扩展
-│   └── mysql-storage     # MySQL 存储扩展
+├── dsp-storage-lucene    # 基于公共存储 API 的 Lucene 实现
+├── dsp-engine            # Calcite、SQL 执行、表达式与元数据管理
 ├── dsp-schema/           # Schema 适配层
 │   ├── common-schema
 │   ├── file-schema
@@ -33,31 +29,31 @@ dsp (parent)
 dsp-core
     ↑
 dsp-storage-api
-    ↑
-dsp-runtime ──→ base-storage ──→ lucene-storage / rocksdb-storage / mysql-storage
-    ↑
-dsp-protocol
+    ↑                 ↑
+dsp-storage-lucene    │
+    ↑                 │
+    └──── dsp-engine ─┘
+              ↑
+         dsp-protocol
 ```
 
 - **dsp-core**：无内部模块依赖，仅依赖 Guava、Lombok、Calcite 等基础库
 - **dsp-storage-api**：依赖 dsp-core，定义存储引擎接口
-- **dsp-runtime**：依赖 dsp-core，保留执行引擎与表达式体系
-- **base-storage**：依赖 dsp-core + dsp-storage-api + dsp-runtime
-- **dsp-protocol**：依赖 dsp-runtime + base-storage + lucene-storage
+- **dsp-storage-lucene**：实现公共存储接口，由 ServiceLoader 注册引擎工厂
+- **dsp-engine**：负责 SQL 执行，并在边界适配核心 Row/Value
+- **dsp-protocol**：依赖 dsp-engine，对外提供 MySQL 协议入口
 
 ## 构建
 
 ```bash
-mvn compile -DskipTests
+mvn test
 ```
 
 ## 重构进度
 
 - [x] Phase 1: 创建 dsp-core（数据模型层）
-- [x] Phase 2: 创建 dsp-storage-api（存储抽象层，部分完成）
-- [ ] Phase 3: 迁移 Lucene 到独立 module
-- [ ] Phase 4: 创建 dsp-engine（执行引擎层）
-- [ ] Phase 5: 更新 protocol 依赖
-- [ ] Phase 6: 清理旧模块（dsp-runtime 重复代码）
-
-详细计划见 `docs/superpowers/plans/2026-01-02-storage-refactor-plan.md`
+- [x] Phase 2: 创建并接入 dsp-storage-api
+- [x] Phase 3: 迁移 Lucene 到独立 module
+- [x] Phase 4: dsp-engine 主链路切换到公共存储 API
+- [x] Phase 5: 更新 protocol 依赖并清理旧存储实现
+- [ ] Phase 6: 收敛 dsp-core 与 dsp-engine 中重复的 DataType/Value

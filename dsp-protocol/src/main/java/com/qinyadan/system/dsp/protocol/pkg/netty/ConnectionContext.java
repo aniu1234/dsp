@@ -5,7 +5,6 @@ import com.qinyadan.system.dsp.protocol.pkg.MysqlPackage;
 import com.qinyadan.system.dsp.protocol.utils.PackageUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.util.ReferenceCountUtil;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -45,9 +44,6 @@ public class ConnectionContext {
 
     public void write(ByteBuf byteBuf) {
         channelHandlerContext.writeAndFlush(byteBuf);
-        if (ReferenceCountUtil.refCnt(byteBuf) > 0) {
-            ReferenceCountUtil.release(byteBuf);
-        }
     }
 
     public void write(MysqlPackage result) {

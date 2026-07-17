@@ -1,7 +1,6 @@
 package com.qinyadan.system.dsp.engine.data.func.agg;
 
 import com.qinyadan.system.dsp.engine.data.type.DataType;
-import com.qinyadan.system.dsp.engine.data.type.DataTypes;
 import com.qinyadan.system.dsp.engine.data.value.Value;
 
 import java.util.List;
@@ -36,14 +35,11 @@ public class MaxAggregation extends AbstractAggregation {
 
     @Override
     public void init() {
-        if (DataTypes.DECIMAL_TYPES.contains(inputType)) {
-            r = new Value(Double.MIN_VALUE, resultType);
-        } else {
-            r = new Value(Long.MIN_VALUE, resultType);
-        }
+        r = new Value(null, resultType);
 
         v = originDatas.stream()
                 .map(values -> values.getColumn(index))
+                .filter(value -> !value.isNull())
                 .collect(Collectors.toList());
 
         if (isDistinct) {

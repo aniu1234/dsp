@@ -33,6 +33,7 @@ public class ByteBufToPackageDecoder extends MessageToMessageDecoder<ByteBuf> {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-        //super.exceptionCaught(ctx, cause);
+        log.warn("Failed to decode MySQL protocol packet from {}", ctx.channel().remoteAddress(), cause);
+        ctx.close();
     }
 }

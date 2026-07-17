@@ -1,6 +1,7 @@
 package com.qinyadan.system.dsp.engine.data.func;
 
 import com.qinyadan.system.dsp.engine.data.type.DataType;
+import com.qinyadan.system.dsp.engine.data.type.DataTypes;
 import com.qinyadan.system.dsp.engine.data.value.Value;
 
 import java.util.List;
@@ -57,14 +58,10 @@ public abstract class CompareFunction extends Scalar {
         final Value v1 = args.get(0);
         final Value v2 = args.get(1);
 
-        //TODO 如果对NULL处理不同，可以同时override evaluate 和compare方法
-        if (v1.isNull() && v2.isNull()) {
-            return Value.ofBooleanTrue();
-        } else if (!v1.isNull() && !v2.isNull()) {
-            return Value.ofBooean(compare(v1, v2));
-        } else {
-            return Value.ofBooleanFalse();
+        if (v1.isNull() || v2.isNull()) {
+            return new Value(null, DataTypes.BOOLEAN);
         }
+        return Value.ofBooean(compare(v1, v2));
     }
 
     /**

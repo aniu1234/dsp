@@ -207,7 +207,7 @@ public class Value implements Comparable<Value> {
         }
 
         if (value instanceof Number) {
-            return BigDecimal.ZERO.equals(new BigDecimal(value.toString()));
+            return BigDecimal.ZERO.compareTo(new BigDecimal(value.toString())) != 0;
         }
 
         if (cl == String.class) {
@@ -288,6 +288,9 @@ public class Value implements Comparable<Value> {
 
     @Override
     public int compareTo(Value o) {
+        if (isNull()) {
+            return o.isNull() ? 0 : -1;
+        }
         if (o.isNull()) {
             return 1;
         }
@@ -331,23 +334,23 @@ public class Value implements Comparable<Value> {
 
     @Override
     public boolean equals(Object o) {
-
-        if (o.getClass() != Value.class) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof Value)) {
             return false;
         }
 
         Value v = (Value) o;
-
-        if (isNull()) {
-            return v.isNull();
+        if (!Objects.equals(dataType, v.dataType)) {
+            return false;
         }
-
-        return this.getValueByType().equals(v.getValueByType());
+        return Objects.equals(this.getValueByType(), v.getValueByType());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(value, dataType);
+        return Objects.hash(getValueByType(), dataType);
     }
 
     public void setDataType(DataType dataType) {

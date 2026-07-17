@@ -61,6 +61,6 @@ public class ShortType extends DataType<Short> implements FixedWidthType {
 
     @Override
     public int compare(Short o1, Short o2) {
-        return Short.compare(o1, o1);
+        return Short.compare(o1, o2);
     }
 }

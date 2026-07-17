@@ -193,14 +193,23 @@ public class SqlInsertHandler implements Handler<SqlInsert> {
                 Value v;
 
                 //todo Should check value and type conflict
-                if (node instanceof SqlNumericLiteral) {
+                if (SqlUtil.isNullLiteral(node, false)) {
+                    v = dataType.createByType(null);
+                } else if (node instanceof SqlNumericLiteral) {
                     BigDecimal decimal = (BigDecimal) ((SqlNumericLiteral) node).getValue();
                     v = dataType.createByType(decimal);
-                } else {
-                    //todo, insert into t values(NULL, NULL, NULL) will come here and get exception
+                } else if (node instanceof SqlCharStringLiteral) {
                     SqlCharStringLiteral sqlCharStringLiteral = (SqlCharStringLiteral) node;
                     final String stringValue = sqlCharStringLiteral.getNlsString().getValue();
                     v = dataType.createByType(stringValue);
+                } else if (node instanceof SqlLiteral) {
+                    v = dataType.createByType(((SqlLiteral) node).getValue());
+                } else {
+                    log.warn("Unsupported INSERT expression: {}", node);
+                    MysqlPackage mysqlPackage = PackageUtils.buildSyntaxErrPackage(
+                            connectionContext.getQueryString());
+                    connectionContext.write(mysqlPackage);
+                    return null;
                 }
 
                 columnNameAndValue.put(colName, v);

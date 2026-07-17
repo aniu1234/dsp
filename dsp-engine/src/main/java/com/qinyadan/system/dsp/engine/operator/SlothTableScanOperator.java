@@ -6,7 +6,8 @@ import com.qinyadan.system.dsp.engine.data.type.DataType;
 import com.qinyadan.system.dsp.engine.calcite.SlothSchemaHolder;
 import com.qinyadan.system.dsp.engine.calcite.SlothTable;
 import com.qinyadan.system.dsp.engine.calcite.SlothTableEngine;
-import com.qinyadan.system.dsp.storage.QueryContext;
+import com.qinyadan.system.dsp.storage.api.query.BaseQuery;
+import com.qinyadan.system.dsp.storage.api.query.QueryContext;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.type.RelDataType;
@@ -51,23 +52,10 @@ public class SlothTableScanOperator extends AbstractOperator<SlothRow> {
 
         final SlothTableEngine slothTableEngine = slothTable.getSlothTableEngine();
 
-        final QueryContext queryContext =
-                new QueryContext(new com.qinyadan.system.dsp.storage.Query() {}, Sets.newHashSet(slothTableEngine.getColumnNames()));
-        Iterator<?> rawIterator = slothTableEngine.search(queryContext);
-        iterator = new Iterator<SlothRow>() {
-            @Override
-            public boolean hasNext() {
-                return rawIterator.hasNext();
-            }
-            @Override
-            public SlothRow next() {
-                com.qinyadan.system.dsp.engine.data.SlothRow oldRow =
-                        (com.qinyadan.system.dsp.engine.data.SlothRow) rawIterator.next();
-                SlothRow newRow = new SlothRow();
-                newRow.setRowValue(oldRow.getAllColumn());
-                return newRow;
-            }
-        };
+        java.util.Set<String> columns = Sets.newHashSet(slothTableEngine.getColumnNames());
+        final QueryContext queryContext = new QueryContext(
+                BaseQuery.builder().columnNames(columns).build(), columns);
+        iterator = slothTableEngine.search(queryContext);
     }
 
     @Override

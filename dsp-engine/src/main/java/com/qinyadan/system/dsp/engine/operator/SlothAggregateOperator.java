@@ -84,15 +84,11 @@ public class SlothAggregateOperator extends AbstractOperator<SlothRow> {
 
     private Iterator<SlothRow> getResultWithGroupBy(List<SlothRow> valueHolder) {
         List<AbstractAggregation> aggregations = createAggregation();
-        return valueHolder.stream().collect(Collectors.groupingBy(row -> {
-            final StringBuilder builder = new StringBuilder();
-
-            for (Integer i : groupByIndex) {
-                //TODO 用MD5拼key
-                builder.append(row.getColumn(i).stringValue()).append("<------------>");
-            }
-            return builder.toString();
-        })).values().stream().map(l -> {
+        return valueHolder.stream().collect(Collectors.groupingBy(row ->
+                groupByIndex.stream()
+                        .map(index -> row.getColumn(index).copy())
+                        .collect(Collectors.toList())))
+                .values().stream().map(l -> {
             List<Value> g = aggregations.stream().map(agg -> {
                 agg.setOriginDatas(l);
                 return agg.compute();
@@ -128,13 +124,15 @@ public class SlothAggregateOperator extends AbstractOperator<SlothRow> {
             final SqlAggFunction function = call.getAggregation();
             final List<Integer> args = call.getArgList();
             final int index = args.size() == 0 ? -1 : args.get(0);
+            final com.qinyadan.system.dsp.engine.data.type.DataType inputType = index < 0
+                    ? null : input.getRowType().get(index);
 
             final AbstractAggregation r;
             if (function == SqlStdOperatorTable.SUM) {
                 r = new SumAggregation(
                         call.isDistinct(),
                         call.ignoreNulls(),
-                        null,
+                        inputType,
                         TypeConversionUtils.getBySqlTypeName(call.type.getSqlTypeName()),
                         index,
                         groupByIndex);
@@ -142,7 +140,7 @@ public class SlothAggregateOperator extends AbstractOperator<SlothRow> {
                 r = new CountAggregation(
                         call.isDistinct(),
                         call.ignoreNulls(),
-                        null,
+                        inputType,
                         TypeConversionUtils.getBySqlTypeName(call.type.getSqlTypeName()),
                         index,
                         args.isEmpty(),
@@ -151,20 +149,23 @@ public class SlothAggregateOperator extends AbstractOperator<SlothRow> {
                 r = new MaxAggregation(
                         call.isDistinct(),
                         call.ignoreNulls(),
-                        null,
+                        inputType,
+                        TypeConversionUtils.getBySqlTypeName(call.type.getSqlTypeName()),
+                        index,
+                        groupByIndex
+                );
+            } else if (function == SqlStdOperatorTable.MIN) {
+                r = new MinAggregation(
+                        call.isDistinct(),
+                        call.ignoreNulls(),
+                        inputType,
                         TypeConversionUtils.getBySqlTypeName(call.type.getSqlTypeName()),
                         index,
                         groupByIndex
                 );
             } else {
-                r = new MinAggregation(
-                        call.isDistinct(),
-                        call.ignoreNulls(),
-                        null,
-                        TypeConversionUtils.getBySqlTypeName(call.type.getSqlTypeName()),
-                        index,
-                        groupByIndex
-                );
+                throw new UnsupportedOperationException(
+                        "Unsupported aggregate function: " + function.getName());
             }
             return r;
         }).collect(Collectors.toList());

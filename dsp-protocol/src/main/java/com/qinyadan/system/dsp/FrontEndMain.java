@@ -13,8 +13,11 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.handler.timeout.WriteTimeoutHandler;
-import io.netty.util.concurrent.GenericFutureListener;
+import io.netty.util.concurrent.DefaultEventExecutorGroup;
+import io.netty.util.concurrent.EventExecutorGroup;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.qinyadan.system.dsp.constant.Constants.CPU_CORES;
 import static java.nio.ByteOrder.LITTLE_ENDIAN;
@@ -25,14 +28,23 @@ public class FrontEndMain {
 
     public static void main(String[] args) {
 
-        int port = 3016;
+        int port = getServerPort();
 
         LifeCycleInstance.start();
+        final EventLoopGroup boss = new NioEventLoopGroup(1);
+        final EventLoopGroup work = new NioEventLoopGroup(CPU_CORES * 2);
+        final EventExecutorGroup queryExecutors = new DefaultEventExecutorGroup(CPU_CORES);
+        final AtomicReference<Channel> serverChannel = new AtomicReference<>();
+        final Thread shutdownHook = new Thread(() -> {
+            Channel channel = serverChannel.get();
+            if (channel != null) {
+                channel.close().syncUninterruptibly();
+            }
+        }, "dsp-shutdown");
+        Runtime.getRuntime().addShutdownHook(shutdownHook);
 
         //start netty port
         try {
-            final EventLoopGroup boss = new NioEventLoopGroup(1);
-            final EventLoopGroup work = new NioEventLoopGroup(CPU_CORES * 2);
             final ServerBootstrap serverBootstrap = new ServerBootstrap();
 
             serverBootstrap
@@ -48,7 +60,7 @@ public class FrontEndMain {
                 @Override
                 protected void initChannel(Channel channel) throws Exception {
                     final ChannelPipeline pipeline = channel.pipeline();
-                    pipeline.addLast("open_channler", new NettyConnectionHandler());
+                    pipeline.addLast("open_channel", NettyConnectionHandler.INSTANCE);
 
                     pipeline.addLast("read_timeout_handler", new ReadTimeoutHandler(ConnectionConfig.READ_TIMEOUT));
                     pipeline.addLast("write_time_handler", new WriteTimeoutHandler(ConnectionConfig.WRITE_TIMEOUT));
@@ -65,18 +77,48 @@ public class FrontEndMain {
 
                     pipeline.addLast("bytebuf_to_buffer_decoder", new ByteBufToPackageDecoder());
                     pipeline.addLast("authentication", new AuthenticationHandler());
-                    pipeline.addLast("query_handler", new MysqlPackageHandler());
+                    pipeline.addLast(queryExecutors, "query_handler", new MysqlPackageHandler());
                 }
             });
 
             serverBootstrap.validate();
             ChannelFuture channelFuture = serverBootstrap.bind(port).sync();
-
-            channelFuture.channel().closeFuture().addListener((GenericFutureListener) future -> {
-                log.info("channelFuture listener{}", future.toString());
-            });
+            serverChannel.set(channelFuture.channel());
+            channelFuture.channel().closeFuture().sync();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Frontend server interrupted", e);
         } catch (Exception e) {
             log.error(Throwables.getStackTraceAsString(e));
+        } finally {
+            try {
+                Runtime.getRuntime().removeShutdownHook(shutdownHook);
+            } catch (IllegalStateException ignored) {
+                // The JVM is already running shutdown hooks.
+            }
+            queryExecutors.shutdownGracefully().syncUninterruptibly();
+            work.shutdownGracefully().syncUninterruptibly();
+            boss.shutdownGracefully().syncUninterruptibly();
+            LifeCycleInstance.closeAll();
+        }
+    }
+
+    private static int getServerPort() {
+        String configured = System.getProperty("dsp.server.port");
+        if (configured == null || configured.trim().isEmpty()) {
+            configured = System.getenv("DSP_SERVER_PORT");
+        }
+        if (configured == null || configured.trim().isEmpty()) {
+            return 3016;
+        }
+        try {
+            int port = Integer.parseInt(configured.trim());
+            if (port < 1 || port > 65535) {
+                throw new IllegalArgumentException("Port must be between 1 and 65535: " + port);
+            }
+            return port;
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid DSP server port: " + configured, e);
         }
     }
 }

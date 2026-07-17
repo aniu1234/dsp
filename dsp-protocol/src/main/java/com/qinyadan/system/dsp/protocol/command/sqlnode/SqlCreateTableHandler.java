@@ -102,7 +102,7 @@ public class SqlCreateTableHandler implements Handler<SqlCreateTable> {
             return new ErrorMessage(NO_DATABASE_SELECTED.getCode(), NO_DATABASE_SELECTED.getMessage());
         }
 
-        final SlothSchema slothSchema = SlothSchemaHolder.INSTANCE.getSlothSchema(db);
+        final SlothSchema slothSchema = SlothSchemaHolder.INSTANCE.getSlothSchema(realDb);
         if (Objects.isNull(slothSchema)) {
             return new ErrorMessage(UNKNOWN_DB_NAME.getCode(), String.format(UNKNOWN_DB_NAME.getMessage(), realDb));
         }

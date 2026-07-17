@@ -224,6 +224,29 @@ public class IOUtils {
         return result;
     }
 
+    public static byte[] readLengthEncodedBytes(ByteBuf byteBuf) {
+        int length = readLengthEncodedInteger(byteBuf);
+        return readBytes(byteBuf, length);
+    }
+
+    public static byte[] readBytesUntilNull(ByteBuf byteBuf) {
+        ByteBuf result = PooledByteBufAllocator.DEFAULT.buffer(byteBuf.readableBytes());
+        try {
+            while (byteBuf.isReadable()) {
+                byte value = byteBuf.readByte();
+                if (value == END_FLAG) {
+                    break;
+                }
+                result.writeByte(value);
+            }
+            byte[] bytes = new byte[result.readableBytes()];
+            result.readBytes(bytes);
+            return bytes;
+        } finally {
+            result.release();
+        }
+    }
+
     public static String readLengthEncodedString(ByteBuf byteBuf) {
         int firstByteInt = IOUtils.readInteger(byteBuf, 1);
         if (firstByteInt == 0xfb) {

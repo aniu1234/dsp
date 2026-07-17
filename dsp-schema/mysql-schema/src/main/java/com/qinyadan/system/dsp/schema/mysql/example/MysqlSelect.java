@@ -14,7 +14,8 @@ public class MysqlSelect {
         try {
             final Properties info = new Properties();
             info.setProperty(META_MODEL,
-                    "/Users/liuzm/workspace/Storage/dsp/dsp-schema/mysql-schema/src/main/resources/mysql.json");
+                    Thread.currentThread().getContextClassLoader()
+                            .getResource("mysql.json").getPath());
 
             Connection connection =
                     DriverManager.getConnection("jdbc:calcite:", info);

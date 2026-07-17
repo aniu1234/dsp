@@ -7,17 +7,17 @@ import com.qinyadan.system.dsp.engine.calcite.SlothSchemaHolder;
 import com.qinyadan.system.dsp.engine.calcite.EnvironmentValueHolder;
 
 import java.util.List;
+import java.util.ListIterator;
 
 
 public enum LifeCycleInstance {
 
     ;
 
-    @SuppressWarnings("unchecked")
     private static final List<LifeCycle> lifeCycles = Lists.newArrayList(
             SlothSchemaHolder.INSTANCE,
-            (LifeCycle) (Object) EnvironmentValueHolder.INSTACNE,
-            (LifeCycle) (Object) StorageService.INSTANCE
+            EnvironmentValueHolder.INSTACNE,
+            StorageService.INSTANCE
     );
 
     public static void add(LifeCycle lifeCycle) {
@@ -38,6 +38,9 @@ public enum LifeCycleInstance {
     }
 
     public static void closeAll() {
-        lifeCycles.forEach(LifeCycle::close);
+        ListIterator<LifeCycle> iterator = lifeCycles.listIterator(lifeCycles.size());
+        while (iterator.hasPrevious()) {
+            iterator.previous().close();
+        }
     }
 }

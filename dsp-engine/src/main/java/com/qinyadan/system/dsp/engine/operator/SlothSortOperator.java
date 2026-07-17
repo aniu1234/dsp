@@ -109,7 +109,7 @@ public class SlothSortOperator extends AbstractOperator<SlothRow> {
 
     @Override
     public void close() {
-
+        input.close();
     }
 
 

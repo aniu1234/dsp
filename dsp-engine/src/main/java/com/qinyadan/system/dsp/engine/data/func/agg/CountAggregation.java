@@ -41,10 +41,8 @@ public class CountAggregation extends AbstractAggregation {
         for (Value value : v) {
             if (countStart) {
                 count++;
-            } else {
-                if (!value.isNull() || (value.isNull() && !ignoreNull)) {
-                    count++;
-                }
+            } else if (!value.isNull()) {
+                count++;
             }
         }
         result.setValue(count);

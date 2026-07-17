@@ -4,6 +4,7 @@ import com.qinyadan.system.dsp.protocol.command.sqlnode.SqlUseHandler;
 import com.qinyadan.system.dsp.constant.ErrorCodeAndMessageEnum;
 import com.qinyadan.system.dsp.protocol.pkg.MysqlPackage;
 import com.qinyadan.system.dsp.protocol.pkg.auth.LoginRequest;
+import com.qinyadan.system.dsp.protocol.pkg.auth.MysqlNativePassword;
 import com.qinyadan.system.dsp.protocol.pkg.response.ErrPackage;
 import com.qinyadan.system.dsp.protocol.utils.PackageUtils;
 import io.netty.buffer.ByteBuf;
@@ -12,9 +13,14 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
+import lombok.extern.slf4j.Slf4j;
 
 
+@Slf4j
 public class AuthenticationHandler extends ChannelInboundHandlerAdapter {
+
+    private static final AtomicBoolean MISSING_CONFIG_LOGGED = new AtomicBoolean();
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
@@ -34,13 +40,14 @@ public class AuthenticationHandler extends ChannelInboundHandlerAdapter {
             //do authentcaion
             final LoginRequest loginRequest = (LoginRequest) ((MysqlPackage) msg)
                     .getAbstractReaderAndWriterPackage();
-            boolean res = doAuthencation(loginRequest);
+            boolean res = doAuthencation(loginRequest, channel);
 
             MysqlPackage mysqlPackage;
 
             if (res) {
                 final ConnectionContext connectionContext = new ConnectionContext(ctx);
                 NettyConnectionHandler.INSTANCE.getAlreadyAuthenChannels().put(channel, connectionContext);
+                NettyConnectionHandler.INSTANCE.clearAuthChallenge(channel);
 
                 final String dbName = loginRequest.getDatabase();
                 if (Objects.nonNull(dbName)) {
@@ -74,11 +81,12 @@ public class AuthenticationHandler extends ChannelInboundHandlerAdapter {
         }
     }
 
-    private boolean doAuthencation(LoginRequest loginRequest) {
+    private boolean doAuthencation(LoginRequest loginRequest, Channel channel) {
         final String userName = loginRequest.getUserName();
-        final String passwordHash = loginRequest.getAuthResponse();
+        final byte[] passwordHash = loginRequest.getAuthResponse();
+        final byte[] challenge = NettyConnectionHandler.INSTANCE.getAuthChallenge(channel);
 
-        return compareUsernameAndPassword(userName, passwordHash);
+        return compareUsernameAndPassword(userName, passwordHash, challenge);
     }
 
     /**
@@ -88,9 +96,21 @@ public class AuthenticationHandler extends ChannelInboundHandlerAdapter {
      * @param password
      * @return
      */
-    private boolean compareUsernameAndPassword(String userName, String password) {
+    private boolean compareUsernameAndPassword(String userName, byte[] passwordHash, byte[] challenge) {
+        String configuredUser = config("dsp.auth.username", "DSP_AUTH_USERNAME");
+        String configuredPassword = config("dsp.auth.password", "DSP_AUTH_PASSWORD");
+        if (configuredUser == null || configuredPassword == null) {
+            if (MISSING_CONFIG_LOGGED.compareAndSet(false, true)) {
+                log.warn("Authentication is not configured; set DSP_AUTH_USERNAME and DSP_AUTH_PASSWORD");
+            }
+            return false;
+        }
+        return Objects.equals(configuredUser, userName)
+                && MysqlNativePassword.matches(configuredPassword, challenge, passwordHash);
+    }
 
-        //todo
-        return true;
+    private static String config(String propertyName, String environmentName) {
+        String value = System.getProperty(propertyName);
+        return value == null ? System.getenv(environmentName) : value;
     }
 }

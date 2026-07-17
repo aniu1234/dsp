@@ -1,12 +1,12 @@
 package com.qinyadan.system.dsp.engine.calcite;
 
-import com.google.common.collect.Maps;
 import com.qinyadan.system.dsp.engine.LifeCycle;
 import com.qinyadan.system.dsp.engine.meta.SchemaMeta;
 import com.qinyadan.system.dsp.engine.meta.TableMeta;
 import org.apache.calcite.jdbc.CalciteSchema;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 /**
@@ -19,18 +19,20 @@ public class SlothSchemaHolder implements LifeCycle {
     public static final SlothSchemaHolder INSTANCE = new SlothSchemaHolder();
 
     public SlothSchemaHolder() {
-        this.schemaMap = Maps.newHashMap();
+        this.schemaMap = new ConcurrentHashMap<>();
     }
 
     @Override
     public void init() {
-        // TableMeta expects base-storage's SlothSchema/SlothTable types.
-        // Skip DB restore for now — tables are registered via registerSchema/addTable.
+        SchemaMeta.INSTANCE.allSchema().forEach(schemaName -> {
+            SlothSchema schema = registerSchema(schemaName);
+            TableMeta.INSTANCE.getAllTableInDb(schema).forEach(schema::restoreFromDb);
+        });
     }
 
     @Override
     public void close() {
-
+        schemaMap.values().forEach(SlothSchema::closeTables);
     }
 
     public SlothSchema registerSchema(String schemaName) {
@@ -51,6 +53,9 @@ public class SlothSchemaHolder implements LifeCycle {
 
     public boolean removeSchema(String schemaName) {
         SlothSchema schema = SlothSchemaHolder.INSTANCE.getSlothSchema(schemaName);
+        if (schema == null) {
+            return false;
+        }
         schema.dropTableInSchema();
 
         schemaMap.remove(schemaName);

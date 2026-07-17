@@ -1,31 +1,37 @@
 package com.qinyadan.system.dsp.storage.lucene;
 
-import com.google.common.base.Throwables;
 import com.qinyadan.system.dsp.core.data.Row;
-import com.qinyadan.system.dsp.core.data.RowImpl;
-import com.qinyadan.system.dsp.core.data.value.Value;
-import com.qinyadan.system.dsp.core.data.type.DataType;
 import com.qinyadan.system.dsp.storage.api.StorageEngine;
 import com.qinyadan.system.dsp.storage.api.WriteResult;
-import com.qinyadan.system.dsp.storage.api.query.QueryContext;
 import com.qinyadan.system.dsp.storage.api.meta.ColumnInfo;
+import com.qinyadan.system.dsp.storage.api.query.QueryContext;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.index.*;
-import org.apache.lucene.search.*;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.MatchAllDocsQuery;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.SearcherFactory;
+import org.apache.lucene.search.SearcherManager;
+import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.NIOFSDirectory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.*;
-
-import static com.qinyadan.system.dsp.core.data.type.DataType.Precedence.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Lucene-backed storage engine implementing the {@link StorageEngine} interface.
- * Supports insert, scan, flush, and close operations on a Lucene index.
+ * Lucene-backed implementation of the public storage API.
  */
 public class LuceneStorageEngine implements StorageEngine {
 
@@ -33,178 +39,171 @@ public class LuceneStorageEngine implements StorageEngine {
 
     private final String storagePath;
     private final List<ColumnInfo> columns;
-    private final Map<String, DataType<?>> typeMap;
     private final LuceneDocumentMapper mapper;
+    private final AtomicInteger uncommittedRows = new AtomicInteger();
 
+    private NIOFSDirectory directory;
     private IndexWriter indexWriter;
-    private IndexReader indexReader;
     private SearcherManager searcherManager;
-
-    private boolean readOnly;
-    private volatile int dataNumUncommited = 0;
+    private volatile boolean readOnly;
+    private volatile boolean closed;
     private volatile long lastFlushTime = System.currentTimeMillis();
 
-    public LuceneStorageEngine(String storagePath, List<ColumnInfo> columns, Map<String, DataType<?>> typeMap) {
+    public LuceneStorageEngine(String storagePath, List<ColumnInfo> columns) {
+        if (storagePath == null || columns == null || columns.isEmpty()) {
+            throw new IllegalArgumentException("Storage path and columns are required");
+        }
         this.storagePath = storagePath;
-        this.columns = columns;
-        this.typeMap = typeMap;
-        this.mapper = new LuceneDocumentMapper(columns, typeMap);
+        this.columns = Collections.unmodifiableList(new ArrayList<>(columns));
+        Set<String> names = new HashSet<>();
+        for (ColumnInfo column : columns) {
+            if (column == null || column.getName() == null || column.getType() == null
+                    || !names.add(column.getName())) {
+                throw new IllegalArgumentException("Column names and types must be non-null and unique");
+            }
+        }
+        this.mapper = new LuceneDocumentMapper(this.columns);
     }
 
-    /**
-     * Initialize the Lucene index writer and reader.
-     */
-    public void init() {
-        IndexWriterConfig conf = new IndexWriterConfig();
+    public synchronized void init() {
+        if (indexWriter != null) {
+            return;
+        }
         try {
-            File dir = new File(storagePath);
-            if (!dir.exists()) {
-                dir.mkdirs();
-            }
-            indexWriter = new IndexWriter(new NIOFSDirectory(Paths.get(storagePath)), conf);
-            DirectoryReader reader = DirectoryReader.open(indexWriter);
-            indexReader = new SlothFilterDirectoryReader(reader,
-                    new SlothFilterDirectoryReader.SubReaderWrapper(1));
-
+            Files.createDirectories(Paths.get(storagePath));
+            directory = new NIOFSDirectory(Paths.get(storagePath));
+            indexWriter = new IndexWriter(directory, new IndexWriterConfig());
             searcherManager = new SearcherManager(indexWriter, new SearcherFactory());
-
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                try {
-                    indexWriter.commit();
-                } catch (Exception e) {
-                    LOG.error("Shutdown hook commit failed", e);
-                }
-            }));
         } catch (IOException e) {
-            LOG.error(Throwables.getStackTraceAsString(e));
-            throw new RuntimeException("Failed to init LuceneStorageEngine at " + storagePath, e);
+            close();
+            throw new RuntimeException("Failed to initialize Lucene storage at " + storagePath, e);
         }
     }
 
     @Override
-    public WriteResult append(Row... rows) throws IOException {
+    public synchronized WriteResult append(Row... rows) throws IOException {
+        ensureOpen();
         if (readOnly) {
-            LOG.error("Storage engine is marked read only, can't insert");
+            throw new IllegalStateException("Lucene storage engine is read only: " + storagePath);
+        }
+        if (rows == null || rows.length == 0) {
             return new WriteResult(0, System.currentTimeMillis());
         }
 
+        List<Document> documents = new ArrayList<>(rows.length);
         for (Row row : rows) {
-            Document document = mapper.toRow(row);
-            indexWriter.addDocument(document);
+            documents.add(mapper.toDocument(row));
         }
-
-        dataNumUncommited += rows.length;
+        indexWriter.addDocuments(documents);
+        uncommittedRows.addAndGet(rows.length);
+        searcherManager.maybeRefreshBlocking();
         return new WriteResult(rows.length, System.currentTimeMillis());
     }
 
     @Override
-    public <R> Iterator<R> scan(QueryContext queryContext) throws IOException {
-        IndexSearcher searcher = new IndexSearcher(indexReader);
-        Query query = new MatchAllDocsQuery();
-        TopDocs topDocs = searcher.search(query, Integer.MAX_VALUE);
-
-        Set<String> requestedColumns = queryContext.getColumnNames();
-        List<R> result = new ArrayList<>(topDocs.scoreDocs.length);
-        for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
-            Document doc = requestedColumns != null && !requestedColumns.isEmpty()
-                    ? indexReader.document(scoreDoc.doc, requestedColumns)
-                    : indexReader.document(scoreDoc.doc);
-            result.add((R) documentToRow(doc));
+    public Iterator<Row> scan(QueryContext queryContext) throws IOException {
+        ensureOpen();
+        Set<String> requestedColumns = queryContext == null ? null : queryContext.getColumnNames();
+        if (requestedColumns == null || requestedColumns.isEmpty()) {
+            requestedColumns = new LinkedHashSet<>();
+            for (ColumnInfo column : columns) {
+                requestedColumns.add(column.getName());
+            }
+        } else {
+            requestedColumns = new LinkedHashSet<>(requestedColumns);
         }
-        return result.iterator();
-    }
-
-    private Row documentToRow(Document document) {
-        List<Value> values = new ArrayList<>();
-        List<IndexableField> fields = document.getFields();
-
-        for (int i = 0; i < columns.size() && i < fields.size(); i++) {
-            IndexableField field = fields.get(i);
-            ColumnInfo col = columns.get(i);
-            DataType<?> type = col.getType();
-
-            values.add(fieldToValue(field, type));
+        Set<String> knownColumns = new HashSet<>();
+        for (ColumnInfo column : columns) {
+            knownColumns.add(column.getName());
         }
-        return RowImpl.of(values.toArray(new Value[0]));
-    }
-
-    private Value fieldToValue(IndexableField field, DataType<?> type) {
-        Number numericValue = field.numericValue();
-        if (numericValue == null) {
-            String strVal = field.stringValue();
-            return new Value("NULL".equals(strVal) ? null : strVal, type);
+        if (!knownColumns.containsAll(requestedColumns)) {
+            Set<String> unknown = new HashSet<>(requestedColumns);
+            unknown.removeAll(knownColumns);
+            throw new IllegalArgumentException("Unknown storage columns: " + unknown);
         }
 
-        Object val;
-        switch (type.precedence()) {
-            case BYTE:
-            case SHORT:
-            case INTEGER:
-                val = numericValue.intValue();
-                break;
-            case LONG:
-                val = numericValue.longValue();
-                break;
-            case FLOAT:
-                val = numericValue.floatValue();
-                break;
-            case DOUBLE:
-                val = numericValue.doubleValue();
-                break;
-            default:
-                val = numericValue.longValue();
-                break;
+        IndexSearcher searcher = searcherManager.acquire();
+        try {
+            int documentCount = searcher.getIndexReader().numDocs();
+            if (documentCount == 0) {
+                return Collections.<Row>emptyList().iterator();
+            }
+            TopDocs topDocs = searcher.search(new MatchAllDocsQuery(), documentCount);
+            Set<String> storedFields = new HashSet<>(requestedColumns);
+            for (String column : requestedColumns) {
+                storedFields.add(LuceneDocumentMapper.nullMarker(column));
+                storedFields.add(LuceneDocumentMapper.legacyNullMarker(column));
+            }
+
+            List<Row> rows = new ArrayList<>(topDocs.scoreDocs.length);
+            for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
+                Document document = searcher.doc(scoreDoc.doc, storedFields);
+                rows.add(mapper.fromDocument(document, requestedColumns));
+            }
+            return rows.iterator();
+        } finally {
+            searcherManager.release(searcher);
         }
-
-        return new Value(val, type);
-    }
-
-    private void updateIndexWriterAndReader() throws IOException {
-        LOG.info("Starting flush, current thread = {}", Thread.currentThread());
-        indexWriter.flush();
-
-        DirectoryReader reader = DirectoryReader.open(indexWriter);
-        indexReader = new SlothFilterDirectoryReader(reader,
-                new SlothFilterDirectoryReader.SubReaderWrapper(1));
-
-        searcherManager = new SearcherManager(indexWriter, new SearcherFactory());
     }
 
     @Override
     public long estimateRowCount() {
-        return indexReader.numDocs();
+        ensureOpen();
+        IndexSearcher searcher = null;
+        try {
+            searcher = searcherManager.acquire();
+            return searcher.getIndexReader().numDocs();
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to estimate Lucene row count", e);
+        } finally {
+            if (searcher != null) {
+                try {
+                    searcherManager.release(searcher);
+                } catch (IOException e) {
+                    LOG.warn("Failed to release Lucene searcher", e);
+                }
+            }
+        }
     }
 
     @Override
-    public void flush() {
-        if (readOnly) {
-            LOG.error("Storage engine is marked read only, can't flush");
+    public synchronized void flush() {
+        ensureOpen();
+        if (readOnly || uncommittedRows.get() == 0) {
             return;
         }
-
-        if (dataNumUncommited > 0) {
-            try {
-                updateIndexWriterAndReader();
-                dataNumUncommited = 0;
-            } catch (IOException e) {
-                throw new RuntimeException("Flush failed", e);
-            }
+        try {
+            indexWriter.commit();
+            searcherManager.maybeRefreshBlocking();
+            uncommittedRows.set(0);
+            lastFlushTime = System.currentTimeMillis();
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to flush Lucene storage at " + storagePath, e);
         }
     }
 
     @Override
     public boolean shouldFlush() {
-        return dataNumUncommited > 0 || System.currentTimeMillis() - lastFlushTime > 1000;
+        return !closed && uncommittedRows.get() > 0
+                && System.currentTimeMillis() - lastFlushTime > 1000;
     }
 
     @Override
-    public void close() {
-        try {
-            if (indexWriter != null) indexWriter.close();
-            if (indexReader != null) indexReader.close();
-        } catch (IOException e) {
-            LOG.error(Throwables.getStackTraceAsString(e));
+    public synchronized void close() {
+        if (closed) {
+            return;
         }
+        if (indexWriter != null && !readOnly) {
+            try {
+                flush();
+            } catch (RuntimeException e) {
+                LOG.error("Failed to flush Lucene storage before closing", e);
+            }
+        }
+        closeSearcherManager();
+        closeIndexWriter();
+        closeDirectory();
+        closed = true;
     }
 
     @Override
@@ -215,5 +214,41 @@ public class LuceneStorageEngine implements StorageEngine {
     @Override
     public void setReadOnly(boolean readOnly) {
         this.readOnly = readOnly;
+    }
+
+    private void ensureOpen() {
+        if (closed || indexWriter == null || searcherManager == null) {
+            throw new IllegalStateException("Lucene storage engine is not open: " + storagePath);
+        }
+    }
+
+    private void closeSearcherManager() {
+        if (searcherManager != null) {
+            try {
+                searcherManager.close();
+            } catch (IOException e) {
+                LOG.error("Failed to close Lucene searcher manager", e);
+            }
+        }
+    }
+
+    private void closeIndexWriter() {
+        if (indexWriter != null) {
+            try {
+                indexWriter.close();
+            } catch (IOException e) {
+                LOG.error("Failed to close Lucene index writer", e);
+            }
+        }
+    }
+
+    private void closeDirectory() {
+        if (directory != null) {
+            try {
+                directory.close();
+            } catch (IOException e) {
+                LOG.error("Failed to close Lucene directory", e);
+            }
+        }
     }
 }

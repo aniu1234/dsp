@@ -1,6 +1,6 @@
 package com.qinyadan.system.dsp.engine.calcite;
 
-import com.google.common.collect.Maps;
+import com.qinyadan.system.dsp.engine.meta.TableMeta;
 import lombok.Getter;
 import lombok.Setter;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -8,11 +8,12 @@ import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 public class SlothSchema extends AbstractSchema {
 
-    private Map<String, Table> tables = Maps.newHashMap();
+    private final Map<String, Table> tables = new ConcurrentHashMap<>();
 
     @Getter
     private String schemaName;
@@ -45,16 +46,14 @@ public class SlothSchema extends AbstractSchema {
         tables.remove(tableName);
         calciteSchema.removeTable(tableName);
 
-        // TableMeta persistence disabled due to type mismatch with base-storage
-        // TableMeta.INSTANCE.deleteTable(schemaName, tableName);
+        TableMeta.INSTANCE.deleteTable(schemaName, tableName);
         return true;
     }
 
     public boolean addTable(String tableName, SlothTable slothTable) {
-        // TableMeta expects base-storage's SlothTable, not engine's.
-        // The table metadata persistence is handled separately.
-        // tables.put(tableName, slothTable); // disabled due to type mismatch
+        tables.put(tableName, slothTable);
         calciteSchema.add(tableName, slothTable);
+        TableMeta.INSTANCE.addTable(schemaName, slothTable);
         return true;
     }
 
@@ -66,7 +65,16 @@ public class SlothSchema extends AbstractSchema {
     }
 
     public void dropTableInSchema() {
-        tables.keySet().forEach(this::dropTable);
+        new ArrayList<>(tables.keySet()).forEach(this::dropTable);
+    }
+
+    public void closeTables() {
+        new ArrayList<>(tables.values()).forEach(table -> {
+            SlothTable slothTable = (SlothTable) table;
+            if (slothTable.getSlothTableEngine() != null) {
+                slothTable.getSlothTableEngine().close();
+            }
+        });
     }
 
     public Collection<Table> getAllTable() {

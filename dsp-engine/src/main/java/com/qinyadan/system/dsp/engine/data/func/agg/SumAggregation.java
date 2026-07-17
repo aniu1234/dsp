@@ -29,18 +29,14 @@ public class SumAggregation extends AbstractAggregation {
         if (DataTypes.DECIMAL_TYPES.contains(inputType)) {
             Double t = 0.0;
             for (Value value : v) {
-                if (!value.isNull()) {
-                    t += (Double) value.getValueByType();
-                }
+                t += value.doubleValue();
             }
 
             r.setValue(t);
         } else {
             Long t = 0L;
             for (Value value : v) {
-                if (!value.isNull()) {
-                    t += (Long) value.getValueByType();
-                }
+                t += value.longValue();
             }
 
             r.setValue(t);
@@ -59,6 +55,7 @@ public class SumAggregation extends AbstractAggregation {
 
         v = originDatas.stream()
                 .map(values -> values.getColumn(index))
+                .filter(value -> !value.isNull())
                 .collect(Collectors.toList());
 
         if (isDistinct) {

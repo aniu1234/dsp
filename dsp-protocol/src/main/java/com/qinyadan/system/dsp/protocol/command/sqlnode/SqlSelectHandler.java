@@ -80,12 +80,15 @@ public class SqlSelectHandler implements Handler<SqlNode> {
     private List<List<Object>> executeOperator(Operator<SlothRow> operator) {
         final List<List<Object>> result = Lists.newArrayList();
         operator.open();
-
-        SlothRow tmp;
-        while ((tmp = operator.next()) != SlothRow.EOF_ROW) {
-            result.add(tmp.getAllColumn().stream().map(Value::getValueByType).collect(Collectors.toList()));
+        try {
+            SlothRow tmp;
+            while ((tmp = operator.next()) != SlothRow.EOF_ROW) {
+                result.add(tmp.getAllColumn().stream()
+                        .map(Value::getValueByType).collect(Collectors.toList()));
+            }
+        } finally {
+            operator.close();
         }
-
         return result;
     }
 }

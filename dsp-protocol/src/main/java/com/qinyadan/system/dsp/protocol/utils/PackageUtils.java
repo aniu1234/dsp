@@ -10,6 +10,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 
 import java.util.List;
+import java.util.Arrays;
 
 import static com.qinyadan.system.dsp.constant.CapabilityFlags.*;
 import static com.qinyadan.system.dsp.constant.ErrorCodeAndMessageEnum.SYNTAX_ERROR;
@@ -17,13 +18,18 @@ import static com.qinyadan.system.dsp.constant.ErrorCodeAndMessageEnum.SYNTAX_ER
 
 public class PackageUtils {
 
-    public static byte[] salt1 = {1, 1, 1, 1, 1, 1, 1, 1};
     public static final String AUTHENCATION_PLUGIN = "mysql_native_password";
     private static final int SERVER_VERSION = 0x0a;
     private static final String MYSQL_SERVER_VERSION = "5.7.22";
-    public static byte[] salt2 = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 
-    public static ServerGreeting buildInitAuthencatinPackage() {
+    public static ServerGreeting buildInitAuthencatinPackage(byte[] challenge) {
+        if (challenge == null || challenge.length != 20) {
+            throw new IllegalArgumentException("MySQL authentication challenge must contain 20 bytes");
+        }
+
+        byte[] saltOne = Arrays.copyOfRange(challenge, 0, 8);
+        byte[] saltTwo = new byte[13];
+        System.arraycopy(challenge, 8, saltTwo, 0, 12);
 
         int serverCapability = getServerCapality();
         byte[] sereverCapacility = IOUtils.getBytes(serverCapability);
@@ -32,7 +38,7 @@ public class PackageUtils {
 
         ServerGreeting greetingPackage = ServerGreeting.builder()
                 .serverThreadId((int) Thread.currentThread().getId())
-                .saltOne(salt1)
+                .saltOne(saltOne)
                 .protocalVeriosn((byte) SERVER_VERSION)
                 .serverVeriosnInfo(MYSQL_SERVER_VERSION)
                 //origin is 0xff, cause only disable-ssl mysql -h127.0.0.1 -P3016 -uroot -p123456 --ssl-mode=disabled can connect
@@ -42,7 +48,7 @@ public class PackageUtils {
                 .charSet((byte) 33)
                 .serverStatus((short) 2)
                 .authencationPluginLength((byte) AUTHENCATION_PLUGIN.length())
-                .saltTwo(salt2)
+                .saltTwo(saltTwo)
                 .authencationPlugin(AUTHENCATION_PLUGIN)
                 .build();
 

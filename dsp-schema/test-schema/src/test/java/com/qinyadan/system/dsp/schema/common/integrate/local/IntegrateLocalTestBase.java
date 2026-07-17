@@ -34,8 +34,9 @@ public abstract class IntegrateLocalTestBase extends IntegrateTestBase {
                 final InputStream inputSqlStream = IntegrateLocalTestBase.class.getClassLoader().getResourceAsStream(inputFile);
                 final InputStream resultStream = IntegrateLocalTestBase.class.getClassLoader().getResourceAsStream(resultFile)) {
 
-            inputSql = IOUtils.readLines(inputSqlStream, Charset.defaultCharset()).stream().filter(this::isEmptyLineOrComment).collect(Collectors.toList());
-            results = IOUtils.readLines(resultStream, Charset.defaultCharset()).stream().filter(this::isEmptyLineOrComment).collect(Collectors.toList());
+            inputSql = loadSqlStatements(inputSqlStream);
+            results = IOUtils.readLines(resultStream, Charset.defaultCharset()).stream()
+                    .filter(this::isEmptyLineOrComment).collect(Collectors.toList());
         } catch (Exception e) {
             log.error(e.toString());
             throw new RuntimeException(e);
@@ -63,6 +64,11 @@ public abstract class IntegrateLocalTestBase extends IntegrateTestBase {
 
     private void runTest() {
         final int length = inputSql.size();
+        if (length != results.size()) {
+            throw new IllegalStateException(String.format(
+                    "SQL/result count mismatch in %s: %d SQL statements and %d results",
+                    inputFile, length, results.size()));
+        }
 
         for (int i = 0; i < length; i++) {
             final List<List<String>> acutalResult = runSql(inputSql.get(i), calciteStatement);

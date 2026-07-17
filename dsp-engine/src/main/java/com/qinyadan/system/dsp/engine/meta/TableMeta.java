@@ -98,7 +98,8 @@ public class TableMeta {
 
         //delete from columns
         dslContext.deleteFrom(Sloth.SLOTH.COLUMNS)
-                .where(Sloth.SLOTH.COLUMNS.TABLE_NAME.eq(table).and(Sloth.SLOTH.COLUMNS.TABLE_NAME.eq(table)))
+                .where(Sloth.SLOTH.COLUMNS.TABLE_SCHEMA.eq(schema)
+                        .and(Sloth.SLOTH.COLUMNS.TABLE_NAME.eq(table)))
                 .execute();
     }
 
@@ -111,6 +112,8 @@ public class TableMeta {
         final DSLContext dslContext = mysqlConnection.getDslContext();
         final List<Columns> columns = dslContext.selectFrom(Sloth.SLOTH.COLUMNS)
                 .where(Sloth.SLOTH.COLUMNS.TABLE_SCHEMA.eq(schemaName))
+                .orderBy(Sloth.SLOTH.COLUMNS.TABLE_NAME,
+                        Sloth.SLOTH.COLUMNS.ORDINAL_POSITION)
                 .fetchInto(Columns.class);
 
 

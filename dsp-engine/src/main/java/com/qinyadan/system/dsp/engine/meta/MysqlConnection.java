@@ -16,7 +16,7 @@ public class MysqlConnection {
 
     public static final MysqlConnection INSTANCE = new MysqlConnection();
 
-    private boolean isOk = true;
+    private boolean isOk;
     private String addr;
     private String username;
     private String password;
@@ -24,27 +24,35 @@ public class MysqlConnection {
     private DSLContext dslContext;
 
     public MysqlConnection() {
+        addr = config("dsp.meta.jdbc.url", "DSP_META_JDBC_URL");
+        username = config("dsp.meta.jdbc.username", "DSP_META_JDBC_USERNAME");
+        password = config("dsp.meta.jdbc.password", "DSP_META_JDBC_PASSWORD");
+
+        if (addr == null || addr.trim().isEmpty()) {
+            log.info("Metadata database is disabled; set DSP_META_JDBC_URL to enable it");
+            return;
+        }
+
         try {
             Class.forName("com.mysql.cj.jdbc.Driver");
-
-            //TODO make configuration
-            addr = "jdbc:mysql://localhost:3306";
-            username = "root";
-            password = "qinyadan";
-
             getConnection();
-
             dslContext = MySQLDSL.using(connection, SQLDialect.MYSQL);
+            isOk = true;
         } catch (ClassNotFoundException e) {
             log.error("Can't load mysql driver for:", e);
-            throw new RuntimeException(e);
+            isOk = false;
         } catch (NullPointerException e) {
             log.error("This means your jdbc driver is 5.x and mysql server is 8.x, you need update your jdbc connector");
-            throw new RuntimeException(e);
+            isOk = false;
         } catch (RuntimeException e1) {
-            log.error("init meta database failed, mark meta database is fail, then all db/table you create could not be store");
+            log.error("Failed to initialize metadata database; metadata persistence is disabled", e1);
             isOk = false;
         }
+    }
+
+    private static String config(String propertyName, String environmentName) {
+        String value = System.getProperty(propertyName);
+        return value == null ? System.getenv(environmentName) : value;
     }
 
 
@@ -53,7 +61,9 @@ public class MysqlConnection {
             if (Objects.nonNull(connection) && !connection.isClosed()) {
                 return connection;
             }
-            connection = DriverManager.getConnection(addr, username, password);
+            connection = DriverManager.getConnection(addr,
+                    username == null ? "" : username,
+                    password == null ? "" : password);
             return connection;
         } catch (SQLException e) {
             log.info("can't get connection:", e);
@@ -62,10 +72,6 @@ public class MysqlConnection {
     }
 
     public boolean isOk() {
-        if (!isOk) {
-            log.warn("Meta database is abnormal, attention...");
-        }
-
         return isOk;
     }
 

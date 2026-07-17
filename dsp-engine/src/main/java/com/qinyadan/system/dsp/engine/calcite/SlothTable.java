@@ -15,6 +15,7 @@ import org.apache.calcite.sql.type.SqlTypeName;
 
 import java.util.List;
 import java.util.Objects;
+import java.nio.file.Paths;
 
 
 public class SlothTable extends AbstractQueryableTable {
@@ -84,7 +85,7 @@ public class SlothTable extends AbstractQueryableTable {
     }
 
     public String buildTableEnginePath() {
-        return FileConstants.TABLE_FILE_LOACTION + "/" + schema.getSchemaName() + "/" + tableName;
+        return Paths.get(FileConstants.getTableFileLocation(), schema.getSchemaName(), tableName).toString();
     }
 
 

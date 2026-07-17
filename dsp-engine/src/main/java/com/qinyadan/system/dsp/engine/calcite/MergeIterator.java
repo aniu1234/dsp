@@ -2,21 +2,18 @@ package com.qinyadan.system.dsp.engine.calcite;
 
 import java.util.Iterator;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 
 public class MergeIterator<E> implements Iterator<E> {
 
     private List<Iterator<E>> allValues;
     private int index;
-    private E current;
-
     private int valueSize;
 
     public MergeIterator(List<Iterator<E>> allValues) {
         this.allValues = allValues;
         index = 0;
-        current = null;
-
         valueSize = allValues.size();
     }
 
@@ -26,7 +23,6 @@ public class MergeIterator<E> implements Iterator<E> {
         while (index < valueSize) {
             Iterator<E> it = allValues.get(index);
             if (it.hasNext()) {
-                current = it.next();
                 return true;
             }
 
@@ -38,6 +34,9 @@ public class MergeIterator<E> implements Iterator<E> {
 
     @Override
     public E next() {
-        return current;
+        if (!hasNext()) {
+            throw new NoSuchElementException();
+        }
+        return allValues.get(index).next();
     }
 }
