@@ -14,6 +14,11 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.io.InputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.regex.Pattern;
+import org.apache.commons.io.IOUtils;
 
 import static com.qinyadan.system.dsp.schema.common.constants.CommonConstant.CALCITE_URL;
 import static com.qinyadan.system.dsp.schema.common.constants.MetaConstants.META_MODEL;
@@ -21,6 +26,9 @@ import static com.qinyadan.system.dsp.schema.common.constants.MetaConstants.META
 
 @Slf4j
 public abstract class IntegrateTestBase {
+
+    private static final Pattern SQL_START = Pattern.compile(
+            "(?i)^(select|with|create|set|insert|update|delete|drop|alter|merge|values|explain|show|use)\\b.*");
 
     protected Statement calciteStatement;
 
@@ -35,6 +43,58 @@ public abstract class IntegrateTestBase {
 
         final String sql = line.trim();
         return !(StringUtils.isEmpty(line) || sql.startsWith("--") || sql.startsWith("#"));
+    }
+
+    protected List<String> loadSqlStatements(InputStream inputStream) throws IOException {
+        if (inputStream == null) {
+            throw new IOException("SQL resource does not exist");
+        }
+
+        List<String> statements = Lists.newArrayList();
+        StringBuilder current = new StringBuilder();
+        for (String line : IOUtils.readLines(inputStream, StandardCharsets.UTF_8)) {
+            String sql = stripComment(line).trim();
+            if (sql.isEmpty()) {
+                continue;
+            }
+
+            if (SQL_START.matcher(sql).matches()) {
+                addStatement(statements, current);
+            } else if (current.length() == 0) {
+                log.debug("Ignore non-SQL resource line: {}", sql);
+                continue;
+            }
+
+            if (current.length() > 0) {
+                current.append(' ');
+            }
+            current.append(sql);
+        }
+        addStatement(statements, current);
+        return statements;
+    }
+
+    private static String stripComment(String line) {
+        if (line == null) {
+            return "";
+        }
+        String trimmed = line.trim();
+        if (trimmed.startsWith("--") || trimmed.startsWith("#")) {
+            return "";
+        }
+        int comment = line.indexOf("--");
+        int hashComment = line.indexOf('#');
+        if (comment < 0 || hashComment >= 0 && hashComment < comment) {
+            comment = hashComment;
+        }
+        return comment < 0 ? line : line.substring(0, comment);
+    }
+
+    private static void addStatement(List<String> statements, StringBuilder current) {
+        if (current.length() > 0) {
+            statements.add(current.toString());
+            current.setLength(0);
+        }
     }
 
     private void getStatement() {

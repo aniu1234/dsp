@@ -10,6 +10,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.junit.AssumptionViolatedException;
 
 import java.io.InputStream;
 import java.nio.charset.Charset;
@@ -33,9 +34,11 @@ public abstract class IntegrateRemoteTestBase extends IntegrateTestBase {
         try (
                 final InputStream inputSqlStream = IntegrateLocalTestBase.class.getClassLoader().getResourceAsStream(filePath)) {
 
-            sqls = IOUtils.readLines(inputSqlStream, Charset.defaultCharset()).stream().filter(this::isEmptyLineOrComment).collect(Collectors.toList());
+            sqls = loadSqlStatements(inputSqlStream);
 
             dbStatement = getStatement();
+        } catch (AssumptionViolatedException e) {
+            throw e;
         } catch (Exception e) {
             log.error(e.toString());
             throw new RuntimeException(e);
@@ -50,7 +53,7 @@ public abstract class IntegrateRemoteTestBase extends IntegrateTestBase {
             }
 
             if (dbStatement != null && !dbStatement.isClosed()) {
-                calciteStatement.close();
+                dbStatement.close();
             }
         } catch (Exception e) {
             //ignore

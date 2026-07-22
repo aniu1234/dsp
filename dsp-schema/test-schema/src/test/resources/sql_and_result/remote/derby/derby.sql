@@ -13,7 +13,8 @@ CREATE TABLE t1
     varchar_type  varchar(255),
     float_type    float    DEFAULT NULL,
     double_type   double   DEFAULT NULL
-) insert into t1 values(1,    1, 21, 4, 'ca', 1.5, 0.6)
+)
+insert into t1 values(1,    1, 21, 4, 'ca', 1.5, 0.6)
 insert into t1 values(null, 3, 13, 17, 'au', 2.0, 1.2)
 insert into t1 values(2, null, 4, 33,  'cn', 0.1, 14.5)
 insert into t1 values(1,    1, null, 23, 'uk', 2.5, 89.5)
@@ -36,7 +37,8 @@ CREATE TABLE t1
     varchar_type  varchar(255),
     float_type    float    DEFAULT NULL,
     double_type   double   DEFAULT NULL
-) INSERT INTO t1 VALUES (1, 1, 2, 3, 'vn', 0.5, 0.6)
+)
+INSERT INTO t1 VALUES (1, 1, 2, 3, 'vn', 0.5, 0.6)
 
 ### scheme type is mysql
 CREATE SCHEMA test
@@ -50,7 +52,8 @@ CREATE TABLE t1
     varchar_type  varchar(255),
     float_type    float    DEFAULT NULL,
     double_type   double   DEFAULT NULL
-) INSERT INTO t1 VALUES (1, 1, 2, 30, 'vn', 0.5, 4.8)
+)
+INSERT INTO t1 VALUES (1, 1, 2, 30, 'vn', 0.5, 4.8)
 INSERT INTO t1 VALUES (NULL, 10, 6, 18, 'net', 1.3, 0.6)
 INSERT INTO t1 VALUES (1, NULL, 2, 3, 'zh', 0.01, 0.6)
 INSERT INTO t1 VALUES (5, 3, NULL, 21, 'cn', 1, 0)

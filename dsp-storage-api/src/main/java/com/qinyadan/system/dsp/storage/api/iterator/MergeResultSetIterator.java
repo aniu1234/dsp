@@ -2,6 +2,7 @@ package com.qinyadan.system.dsp.storage.api.iterator;
 
 import java.util.Iterator;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 /**
  * Merges multiple iterators into a single sequential iterator.
@@ -11,13 +12,11 @@ public class MergeResultSetIterator<E> implements ResultSetIterator<E> {
 
     private final List<Iterator<E>> allValues;
     private int index;
-    private E current;
-    private int valueSize;
+    private final int valueSize;
 
     public MergeResultSetIterator(List<Iterator<E>> allValues) {
         this.allValues = allValues;
         this.index = 0;
-        this.current = null;
         this.valueSize = allValues.size();
     }
 
@@ -26,7 +25,6 @@ public class MergeResultSetIterator<E> implements ResultSetIterator<E> {
         while (index < valueSize) {
             Iterator<E> it = allValues.get(index);
             if (it.hasNext()) {
-                current = it.next();
                 return true;
             }
             index++;
@@ -36,6 +34,9 @@ public class MergeResultSetIterator<E> implements ResultSetIterator<E> {
 
     @Override
     public E next() {
-        return current;
+        if (!hasNext()) {
+            throw new NoSuchElementException();
+        }
+        return allValues.get(index).next();
     }
 }

@@ -20,7 +20,7 @@ public interface StorageEngine {
     /**
      * Scan rows matching the query.
      */
-    <R> Iterator<R> scan(QueryContext queryContext) throws IOException;
+    Iterator<Row> scan(QueryContext queryContext) throws IOException;
 
     /**
      * Estimate row count.

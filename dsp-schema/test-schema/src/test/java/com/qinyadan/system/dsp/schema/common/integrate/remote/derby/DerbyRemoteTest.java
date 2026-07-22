@@ -3,18 +3,15 @@ package com.qinyadan.system.dsp.schema.common.integrate.remote.derby;
 import com.qinyadan.system.dsp.schema.common.integrate.local.IntegrateLocalTestBase;
 import com.qinyadan.system.dsp.schema.common.integrate.remote.IntegrateRemoteTestBase;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.IOUtils;
 import org.junit.runners.Parameterized;
+import org.junit.Assume;
 
 import java.io.InputStream;
-import java.nio.charset.Charset;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.List;
-import java.util.stream.Collectors;
 
 import static com.qinyadan.system.dsp.schema.common.constants.CommonConstant.DERBY_DRIVER;
 import static com.qinyadan.system.dsp.schema.common.constants.CommonConstant.DERBY_URL;
@@ -51,15 +48,16 @@ public class DerbyRemoteTest extends IntegrateRemoteTestBase {
 
     @Override
     public void init() {
+        String enabled = System.getProperty("dsp.test.mysql.enabled",
+                System.getenv("DSP_TEST_MYSQL_ENABLED"));
+        Assume.assumeTrue("Derby comparison suite also queries the external MySQL schema",
+                Boolean.parseBoolean(enabled));
         super.init();
         try {
 
             //create schema and table in memory
             final InputStream inputSqlStream = IntegrateLocalTestBase.class.getClassLoader().getResourceAsStream(metaFile);
-            List<String> sqls = IOUtils.readLines(inputSqlStream, Charset.defaultCharset())
-                    .stream()
-                    .filter(this::isEmptyLineOrComment)
-                    .collect(Collectors.toList());
+            java.util.List<String> sqls = loadSqlStatements(inputSqlStream);
 
             for (String sql : sqls) {
                 dbStatement.execute(sql);
@@ -75,6 +73,7 @@ public class DerbyRemoteTest extends IntegrateRemoteTestBase {
     public Statement getStatement() {
 
         try {
+            System.setProperty("derby.stream.error.file", "target/derby.log");
             Class.forName(DERBY_DRIVER).newInstance();
             connection = DriverManager.getConnection(DERBY_URL);
             return connection.createStatement();

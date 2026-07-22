@@ -37,7 +37,7 @@ public class LoginRequest extends AbstractReaderAndWriter {
 
     private String userName;
 
-    private String authResponse;
+    private byte[] authResponse;
 
     private String database;
 
@@ -57,12 +57,12 @@ public class LoginRequest extends AbstractReaderAndWriter {
         this.userName = IOUtils.readString(byteBuf);
 
         if (0 != (clientCapability & CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA)) {
-            authResponse = IOUtils.readLengthEncodedString(byteBuf);
+            authResponse = IOUtils.readLengthEncodedBytes(byteBuf);
         } else if (0 != (clientCapability & CLIENT_SECURE_CONNECTION)) {
             int length = IOUtils.readLengthEncodedInteger(byteBuf);
-            authResponse = IOUtils.readFixLengthString(byteBuf, length);
+            authResponse = IOUtils.readBytes(byteBuf, length);
         } else {
-            authResponse = IOUtils.readString(byteBuf);
+            authResponse = IOUtils.readBytesUntilNull(byteBuf);
         }
 
         if (0 != (clientCapability & CLIENT_CONNECT_WITH_DB)) {
