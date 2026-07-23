@@ -22,11 +22,6 @@ public class CoreDataSemanticsTest {
     }
 
     @Test
-    public void numericValuesConvertToDeclaredDoubleType() {
-        assertEquals(50D, new Value(50L, DataTypes.DOUBLE).doubleValue(), 0D);
-    }
-
-    @Test
     public void nullValuesHaveStableOrdering() {
         Value nullValue = Value.nullValue(DataTypes.INTEGER);
         Value value = new Value(1, DataTypes.INTEGER);

@@ -1,7 +1,5 @@
 package com.qinyadan.system.dsp.engine.operator;
 
-import com.qinyadan.system.dsp.engine.service.QueryResourceLimitException;
-
 import org.junit.After;
 import org.junit.Test;
 

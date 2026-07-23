@@ -1,9 +1,7 @@
 package com.qinyadan.system.dsp.schema.mysql;
 
-import com.google.common.collect.Lists;
 import com.qinyadan.system.dsp.schema.common.enumerator.BasicEnumerator;
-import com.qinyadan.system.dsp.schema.common.util.JavaTypeToSqlTypeConversion;
-import lombok.Getter;
+import com.qinyadan.system.dsp.schema.common.util.ResultSetUtils;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.adapter.enumerable.EnumerableTableScan;
 import org.apache.calcite.adapter.java.AbstractQueryableTable;
@@ -12,103 +10,102 @@ import org.apache.calcite.linq4j.QueryProvider;
 import org.apache.calcite.linq4j.Queryable;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.core.TableScan;
-import org.apache.calcite.rel.rel2sql.RelToSqlConverter;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.schema.TranslatableTable;
 import org.apache.calcite.schema.impl.AbstractTableQueryable;
-import org.apache.calcite.sql.SqlDialect;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
 
 public class MysqlTable extends AbstractQueryableTable implements TranslatableTable {
 
-    private static final String MYSQL_COLUMN_META_SQL =
-            "select COLUMN_NAME, DATA_TYPE from information_schema.columns where table_schema = ? and table_name = ?";
+    private final String qualifiedTable;
+    private final String selectSql;
+    private final MysqlConnectionProvider connectionProvider;
+    private volatile TableMetadata metadata;
 
-    private MysqlReader mysqlReader;
-    private RelToSqlConverter relToSqlConverter;
-    private String schema;
-    private String tableName;
-    private Connection connection;
-
-    @Getter
-    private RelDataType relDataType;
-    private List<RelDataType> colunmTypes;
-    private List<String> columnNames;
-
-    public MysqlTable(String schema, String tableName, Connection connection) {
+    MysqlTable(String schema, String tableName, MysqlConnectionProvider connectionProvider) {
         super(Object[].class);
-        this.schema = schema;
-        this.tableName = tableName;
-        this.connection = connection;
-        relToSqlConverter = new RelToSqlConverter(SqlDialect.DatabaseProduct.MYSQL.getDialect());
+        qualifiedTable = quote(schema) + "." + quote(tableName);
+        selectSql = "select * from " + qualifiedTable;
+        this.connectionProvider = connectionProvider;
     }
 
     @Override
-    public <T> Queryable<T> asQueryable(QueryProvider queryProvider, SchemaPlus schema, String tableName) {
+    public <T> Queryable<T> asQueryable(QueryProvider queryProvider, SchemaPlus schema,
+                                        String tableName) {
         return new AbstractTableQueryable<T>(queryProvider, schema, this, tableName) {
             @Override
             public Enumerator<T> enumerator() {
-                Iterator<Object[]> it = mysqlReader.readData();
-                return (Enumerator<T>) new BasicEnumerator(it);
+                Iterator<Object[]> rows = new MysqlRowReader(
+                        selectSql, connectionProvider).readData();
+                return (Enumerator<T>) new BasicEnumerator(rows);
             }
         };
     }
 
     @Override
     public RelNode toRel(RelOptTable.ToRelContext context, RelOptTable relOptTable) {
-
-        final TableScan relNode = new EnumerableTableScan(context.getCluster(),
+        return new EnumerableTableScan(context.getCluster(),
                 context.getCluster().traitSetOf(EnumerableConvention.INSTANCE),
                 relOptTable, (Class) getElementType());
-
-        if (null == mysqlReader) {
-            final String sql = relToSqlConverter.visit(relNode).asStatement().toString();
-            mysqlReader = new MySqlReaderImpl(sql, connection, this);
-        }
-
-        return relNode;
     }
 
     @Override
     public RelDataType getRowType(RelDataTypeFactory typeFactory) {
-        //get meta data from mysql;
-        if (null != relDataType) {
-            return relDataType;
+        TableMetadata tableMetadata = metadata();
+        List<RelDataType> columnTypes = new ArrayList<>(tableMetadata.types.size());
+        for (Class<?> columnType : tableMetadata.types) {
+            columnTypes.add(typeFactory.createJavaType(columnType));
         }
+        return typeFactory.createStructType(columnTypes, tableMetadata.names);
+    }
 
-        //try to get table meta data from db;
-        try {
-            PreparedStatement preparedStatement =
-                    connection.prepareStatement(MYSQL_COLUMN_META_SQL);
-
-            preparedStatement.setString(1, schema);
-            preparedStatement.setString(2, tableName);
-            ResultSet r = preparedStatement.executeQuery();
-
-            columnNames = Lists.newArrayList();
-            colunmTypes = Lists.newArrayList();
-            while (r.next()) {
-                //FIXME Ignore column case
-                columnNames.add(r.getString(1));
-                final String columnTypeString = r.getString(2);
-                final Class c = JavaTypeToSqlTypeConversion.getJavaTypeBySqlType(columnTypeString);
-                colunmTypes.add(typeFactory.createJavaType(c));
+    private TableMetadata metadata() {
+        TableMetadata current = metadata;
+        if (current != null) {
+            return current;
+        }
+        synchronized (this) {
+            if (metadata == null) {
+                metadata = loadMetadata();
             }
+            return metadata;
+        }
+    }
 
-            relDataType = typeFactory.createStructType(colunmTypes, columnNames);
-            return relDataType;
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException(e);
+    private TableMetadata loadMetadata() {
+        String sql = selectSql + " where 1 = 0";
+        try (Connection connection = connectionProvider.open();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            return new TableMetadata(ResultSetUtils.getColumnNameFromResultSet(resultSet),
+                    ResultSetUtils.getColumnTypeFromResultSet(resultSet));
+        } catch (SQLException e) {
+            throw new IllegalStateException("Unable to load MySQL table metadata for "
+                    + qualifiedTable, e);
+        }
+    }
+
+    private static String quote(String identifier) {
+        return "`" + identifier.replace("`", "``") + "`";
+    }
+
+    private static final class TableMetadata {
+        private final List<String> names;
+        private final List<Class> types;
+
+        private TableMetadata(List<String> names, List<Class> types) {
+            this.names = names;
+            this.types = types;
         }
     }
 }

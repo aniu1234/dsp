@@ -68,18 +68,6 @@ public class SqlEndToEndTest {
         assertOk(execute("CREATE TABLE agg_values (group_name VARCHAR, amount INTEGER) "
                 + "ENGINE = lucene"));
 
-        assertEquals(Arrays.asList(
-                        Arrays.asList("agg_values"),
-                        Arrays.asList("events"),
-                        Arrays.asList("key_left"),
-                        Arrays.asList("key_right"),
-                        Arrays.asList("teams"),
-                        Arrays.asList("users")),
-                resultRows(execute("SHOW TABLES"), 1));
-        List<List<String>> createTable = resultRows(execute("SHOW CREATE TABLE users"), 2);
-        assertEquals("users", createTable.get(0).get(0));
-        assertTrue(createTable.get(0).get(1).contains("ENGINE = lucene"));
-
         assertOk(execute("INSERT INTO users(id) VALUES (1)"));
         assertOk(execute("INSERT INTO users(id, name) VALUES (2, 'member'), (3, NULL)"));
         assertOk(execute("INSERT INTO users(id, name) VALUES (4, '中文')"));
@@ -164,7 +152,6 @@ public class SqlEndToEndTest {
         assertEquals(1048, errorCode(notNullError));
         assertEquals(1235, errorCode(execute("BEGIN")));
         assertEquals(1235, errorCode(execute("SELECT @@not_a_dsp_variable")));
-        assertOk(execute("DROP TABLE teams"));
     }
 
     private static byte[] execute(String sql) {

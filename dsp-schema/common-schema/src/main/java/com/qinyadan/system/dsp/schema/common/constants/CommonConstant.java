@@ -1,11 +1,6 @@
 package com.qinyadan.system.dsp.schema.common.constants;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-
 public class CommonConstant {
-
-    public static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     public static final String CSV_SUFFIX = ".csv";
     public static final String JSON_SUFFIX = ".json";

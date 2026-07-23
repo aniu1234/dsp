@@ -1,50 +1,43 @@
 package com.qinyadan.system.dsp.schema.file.csv;
 
-import com.google.common.base.Throwables;
-import com.qinyadan.system.dsp.schema.common.util.TypeConvertionUtils;
 import com.qinyadan.system.dsp.schema.file.AbstractFileReader;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
-import org.apache.commons.csv.QuoteMode;
+import org.apache.commons.csv.CSVRecord;
 
-import java.io.FileReader;
+import java.io.IOException;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 
 
-@Getter
-@Slf4j
 public class CsvFileReader extends AbstractFileReader {
+
     public CsvFileReader(String dataFilePath, String typeFilePath) {
         super(dataFilePath, typeFilePath);
     }
 
     @Override
     public Iterator<Object[]> readData() {
-        try {
-
-            final CSVFormat csvFormat = CSVFormat.DEFAULT
-                    .withQuoteMode(QuoteMode.NON_NUMERIC)
-                    .withQuote('\'')
-                    .withIgnoreSurroundingSpaces()
-                    .withTrailingDelimiter()
-                    .withNullString("null");
-
-            final CSVParser csvParser = new CSVParser(new FileReader(dataFilePath), csvFormat);
-            return csvParser.getRecords().stream().map(record -> {
-                final int columnSize = record.size();
-                final Object[] res = new Object[columnSize];
-                for (int i = 0; i < columnSize; i++) {
-                    res[i] = TypeConvertionUtils.toObject(fieldTypeEnums.get(i), record.get(i));
+        CSVFormat format = CSVFormat.DEFAULT
+                .withIgnoreSurroundingSpaces()
+                .withNullString("null");
+        List<Object[]> rows = new ArrayList<>();
+        try (Reader reader = Files.newBufferedReader(dataFilePath, StandardCharsets.UTF_8);
+             CSVParser parser = new CSVParser(reader, format)) {
+            for (CSVRecord record : parser) {
+                List<String> values = new ArrayList<>(record.size());
+                for (String value : record) {
+                    values.add(value);
                 }
-
-                return res;
-            }).iterator();
-        } catch (Exception e) {
-            log.error(Throwables.getStackTraceAsString(e));
-            throw new RuntimeException(e);
+                rows.add(convertRow(values));
+            }
+            return rows.iterator();
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to read CSV file: " + dataFilePath, e);
         }
     }
-
 }

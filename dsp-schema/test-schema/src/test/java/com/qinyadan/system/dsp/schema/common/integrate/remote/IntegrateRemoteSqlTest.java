@@ -1,6 +1,7 @@
 package com.qinyadan.system.dsp.schema.common.integrate.remote;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.InputStream;
@@ -12,12 +13,12 @@ import java.util.Objects;
 import org.junit.Assume;
 
 import static com.qinyadan.system.dsp.schema.common.constants.CommonConstant.MYSQL_DRIVER;
-import static com.qinyadan.system.dsp.schema.common.constants.CommonConstant.OBJECT_MAPPER;
 
 
 @Slf4j
 public abstract class IntegrateRemoteSqlTest extends IntegrateRemoteTestBase {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private final String connectionConf;
     private Connection connection;
 

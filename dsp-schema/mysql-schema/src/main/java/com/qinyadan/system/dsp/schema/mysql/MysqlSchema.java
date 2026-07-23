@@ -1,67 +1,66 @@
 package com.qinyadan.system.dsp.schema.mysql;
 
-import com.google.common.collect.Maps;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
-import org.apache.commons.collections4.MapUtils;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.TreeMap;
 
-import static com.qinyadan.system.dsp.schema.common.constants.CommonConstant.MYSQL_DRIVER;
 
-
-@AllArgsConstructor
-@RequiredArgsConstructor
-@Getter
-@Slf4j
 public class MysqlSchema extends AbstractSchema {
-    private final String url;
-    private final String username;
-    private final String password;
+
+    private static final String TABLES_SQL = "select table_name from information_schema.tables "
+            + "where table_type = ? and table_schema = ?";
+    private static final String BASE_TABLE = "BASE TABLE";
+
+    private final MysqlConnectionProvider connectionProvider;
     private final String schema;
+    private volatile Map<String, Table> tableMap;
 
-    private static final String MYSQL_GET_SCHEMA_SENTENCE = "select table_name from information_schema.tables where table_type = ? and TABLE_SCHEMA = ?";
-    private static final String NORMAL_SCHEMA_TYPE = "BASE TABLE";
-
-    private Map<String, Table> tableMap;
+    public MysqlSchema(String url, String username, String password, String schema) {
+        if (schema == null || schema.trim().isEmpty()) {
+            throw new IllegalArgumentException("MySQL schema must not be empty");
+        }
+        connectionProvider = new MysqlConnectionProvider(url, username, password);
+        this.schema = schema.trim();
+    }
 
     @Override
     protected Map<String, Table> getTableMap() {
-        if (MapUtils.isNotEmpty(tableMap)) {
-            return tableMap;
+        Map<String, Table> tables = tableMap;
+        if (tables != null) {
+            return tables;
         }
-
-        Connection connection;
-        try {
-            Class.forName(MYSQL_DRIVER);
-            //should need
-            connection = DriverManager.getConnection(url, username, password);
-            PreparedStatement preparedStatement = connection.prepareStatement(MYSQL_GET_SCHEMA_SENTENCE);
-
-            preparedStatement.setString(1, NORMAL_SCHEMA_TYPE);
-            preparedStatement.setString(2, schema);
-
-            ResultSet resultSet = preparedStatement.executeQuery();
-
-            tableMap = Maps.newHashMap();
-            while (resultSet.next()) {
-                String tableName = resultSet.getString(1);
-                Table mysqlTable = new MysqlTable(schema, tableName, connection);
-                tableMap.put(tableName, mysqlTable);
+        synchronized (this) {
+            if (tableMap == null) {
+                tableMap = loadTables();
             }
-
             return tableMap;
-        } catch (Exception e1) {
-            log.error("Close connection error:" + e1);
-            throw new RuntimeException(e1);
         }
+    }
+
+    private Map<String, Table> loadTables() {
+        Map<String, Table> sortedTables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        try (Connection connection = connectionProvider.open();
+             PreparedStatement statement = connection.prepareStatement(TABLES_SQL)) {
+            statement.setString(1, BASE_TABLE);
+            statement.setString(2, schema);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    String tableName = resultSet.getString(1);
+                    sortedTables.put(tableName,
+                            new MysqlTable(schema, tableName, connectionProvider));
+                }
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Unable to load MySQL schema '" + schema + "'", e);
+        }
+        return Collections.unmodifiableMap(new LinkedHashMap<>(sortedTables));
     }
 }

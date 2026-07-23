@@ -1,28 +1,29 @@
 package com.qinyadan.system.dsp.schema.file.enums;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-
-
-@AllArgsConstructor
-@Getter
 public enum TableTypeEnum {
     /**
      *
      */
-    CSV(0, "CSV"),
+    CSV(".csv"),
 
     /**
      *
      */
-    JSON(1, "JSON");
+    JSON(".json");
 
-    private final int index;
-    private final String name;
+    private final String dataSuffix;
+
+    TableTypeEnum(String dataSuffix) {
+        this.dataSuffix = dataSuffix;
+    }
+
+    public String getDataSuffix() {
+        return dataSuffix;
+    }
 
     public static TableTypeEnum getTableTypeEnumByName(String name) {
         for (TableTypeEnum tableTypeEnum : TableTypeEnum.values()) {
-            if (tableTypeEnum.name.equalsIgnoreCase(name)) {
+            if (tableTypeEnum.name().equalsIgnoreCase(name)) {
                 return tableTypeEnum;
             }
         }

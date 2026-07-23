@@ -1,8 +1,10 @@
 package com.qinyadan.system.dsp.schema.common.util;
 
-import com.google.common.collect.ImmutableMap;
 import org.apache.calcite.linq4j.tree.Primitive;
 
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 
@@ -83,23 +85,33 @@ public enum FieldTypeEnum {
 
 
     static {
-        ImmutableMap.Builder<String, FieldTypeEnum> builder =
-                ImmutableMap.builder();
+        Map<String, FieldTypeEnum> builder = new HashMap<>();
         for (FieldTypeEnum value : values()) {
-            builder.put(value.clazz.getSimpleName(), value);
+            builder.put(value.clazz.getSimpleName().toLowerCase(Locale.ROOT), value);
 
             if (value.primitive != null) {
-                builder.put(value.primitive.primitiveName, value);
+                builder.put(value.primitive.primitiveName.toLowerCase(Locale.ROOT), value);
             }
         }
-        MAP = builder.build();
+        MAP = Collections.unmodifiableMap(builder);
     }
 
     public static Class<?> getByTypeName(String type) {
-        return MAP.get(type).clazz;
+        return getByType(type).clazz;
     }
 
     public static FieldTypeEnum getByType(String type) {
-        return MAP.get(type);
+        if (type == null) {
+            throw new IllegalArgumentException("Field type must not be null");
+        }
+        FieldTypeEnum fieldType = MAP.get(type.trim().toLowerCase(Locale.ROOT));
+        if (fieldType == null) {
+            throw new IllegalArgumentException("Unsupported field type '" + type + "'");
+        }
+        return fieldType;
+    }
+
+    public Class<?> getJavaClass() {
+        return clazz;
     }
 }

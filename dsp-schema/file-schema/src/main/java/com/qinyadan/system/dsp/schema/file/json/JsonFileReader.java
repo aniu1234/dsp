@@ -1,26 +1,24 @@
 package com.qinyadan.system.dsp.schema.file.json;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.google.common.base.Throwables;
-import com.qinyadan.system.dsp.schema.common.constants.CommonConstant;
-import com.qinyadan.system.dsp.schema.common.util.TypeConvertionUtils;
+import com.fasterxml.jackson.databind.MappingIterator;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.qinyadan.system.dsp.schema.file.AbstractFileReader;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.IOUtils;
 
-import java.io.FileInputStream;
-import java.nio.charset.Charset;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 
-@Getter
-@Slf4j
 public class JsonFileReader extends AbstractFileReader {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final TypeReference<Map<String, Object>> ROW_TYPE =
+            new TypeReference<Map<String, Object>>() { };
 
     public JsonFileReader(String dataFilePath, String typeFilePath) {
         super(dataFilePath, typeFilePath);
@@ -28,32 +26,16 @@ public class JsonFileReader extends AbstractFileReader {
 
     @Override
     public Iterator<Object[]> readData() {
-        try {
-            final List<String> stringList =
-                    IOUtils.readLines(new FileInputStream(dataFilePath), Charset.defaultCharset());
-            return stringList.stream().map(json -> {
-                try {
-                    final JsonNode jsonNode = CommonConstant.OBJECT_MAPPER.readTree(json);
-                    final List<String> c = new ArrayList<>(CommonConstant.OBJECT_MAPPER
-                            .convertValue(jsonNode, new TypeReference<Map<String, String>>() {
-                            })
-                            .values());
-
-                    final int size = c.size();
-                    Object[] result = new Object[size];
-                    for (int i = 0; i < size; i++) {
-                        result[i] = TypeConvertionUtils.toObject(fieldTypeEnums.get(i), c.get(i));
-                    }
-                    return result;
-                } catch (Exception e) {
-                    log.error(Throwables.getStackTraceAsString(e));
-                    throw new RuntimeException(e);
-                }
-            }).iterator();
-
-        } catch (Exception e) {
-            log.error(Throwables.getStackTraceAsString(e));
-            throw new RuntimeException(e);
+        List<Object[]> rows = new ArrayList<>();
+        try (InputStream input = Files.newInputStream(dataFilePath);
+             MappingIterator<Map<String, Object>> iterator = OBJECT_MAPPER
+                     .readerFor(ROW_TYPE).readValues(input)) {
+            while (iterator.hasNextValue()) {
+                rows.add(convertRow(iterator.nextValue()));
+            }
+            return rows.iterator();
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to read JSON file: " + dataFilePath, e);
         }
     }
 }

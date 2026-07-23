@@ -1,7 +1,5 @@
 package com.qinyadan.system.dsp.engine.operator;
 
-import com.qinyadan.system.dsp.engine.service.QueryResourceLimitException;
-
 /**
  * Central guard for operators that must materialize rows in memory.
  */

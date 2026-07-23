@@ -10,6 +10,7 @@ import java.util.Map;
 public class HiveSchemaFactory implements SchemaFactory {
     @Override
     public Schema create(SchemaPlus parentSchema, String name, Map<String, Object> operand) {
-        return null;
+        throw new UnsupportedOperationException(
+                "Hive schema connector is not implemented; do not configure it in a model");
     }
 }
