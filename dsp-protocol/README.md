@@ -64,6 +64,8 @@ export DSP_STORAGE_SCAN_PAGE_SIZE='512'
 export DSP_STORAGE_SYNC_WRITES='true'
 # 单条 INSERT 最大行数
 export DSP_WRITE_MAX_ROWS_PER_INSERT='10000'
+# 单条 UPDATE/DELETE 最多匹配行数
+export DSP_WRITE_MAX_ROWS_PER_MUTATION='10000'
 # 幂等键默认保留 5 分钟，最多保留 10000 个
 export DSP_WRITE_IDEMPOTENCY_TTL_MS='300000'
 export DSP_WRITE_IDEMPOTENCY_MAX_KEYS='10000'
@@ -101,8 +103,15 @@ CREATE TABLE users (id INTEGER NOT NULL, name VARCHAR(32)) ENGINE = lucene;
 INSERT INTO users(id, name) VALUES (1, 'Alice')
 /* dsp:idempotency-key=create-user-1 */;
 
+UPDATE users SET name = 'Member' WHERE id = 1;
+DELETE FROM users WHERE id = 1;
+
 SHOW DSP HEALTH;
 SHOW DSP METRICS;
 ```
+
+`UPDATE` / `DELETE` 当前采用单语句自动提交，只支持单分片表。多分片表会返回明确的不支持
+错误；显式事务仍不会被模拟为成功。单次匹配行数由
+`DSP_WRITE_MAX_ROWS_PER_MUTATION` 限制。
 
  

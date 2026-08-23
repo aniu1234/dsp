@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -81,7 +82,7 @@ public class SlothTableEngine implements LifeCycle {
     /**
      * @param values
      */
-    public WriteResult insert(List<List<Value>> values) {
+    public synchronized WriteResult insert(List<List<Value>> values) {
         if (values == null) {
             throw new IllegalArgumentException("Values to insert must not be null");
         }
@@ -113,10 +114,67 @@ public class SlothTableEngine implements LifeCycle {
                 storageEngine.flush();
             }
             return result;
+        } catch (UnsupportedOperationException e) {
+            throw e;
         } catch (IOException e) {
             storageEngine.setReadOnly(true);
             throw new IllegalStateException("Unable to write table "
                     + slothTable.getTableName() + " shard " + shard, e);
+        } catch (RuntimeException e) {
+            storageEngine.setReadOnly(true);
+            throw e;
+        }
+    }
+
+    /**
+     * Snapshot all rows for a single-shard autocommit mutation.
+     */
+    public synchronized List<List<Value>> readAllRowsForMutation() {
+        StorageEngine storageEngine = mutationStorageEngine();
+        Set<String> requestedColumns = new LinkedHashSet<>(columnNames);
+        try {
+            Iterator<Row> rows = storageEngine.scan(
+                    new QueryContext(null, requestedColumns));
+            List<List<Value>> result = new ArrayList<>();
+            while (rows.hasNext()) {
+                Row row = rows.next();
+                List<Value> values = new ArrayList<>(row.columnSize());
+                for (int i = 0; i < row.columnSize(); i++) {
+                    values.add(row.getColumn(i));
+                }
+                result.add(values);
+            }
+            return result;
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to read table for mutation: "
+                    + slothTable.getTableName(), e);
+        }
+    }
+
+    /**
+     * Replace a single-shard table after the complete new row set has been validated.
+     */
+    public synchronized WriteResult replaceAllRows(List<List<Value>> values) {
+        if (values == null) {
+            throw new IllegalArgumentException("Replacement values must not be null");
+        }
+        Row[] rows = values.stream().map(this::toStorageRow).toArray(Row[]::new);
+        StorageEngine storageEngine = mutationStorageEngine();
+        try {
+            WriteResult result = storageEngine.replaceAll(rows);
+            if (result == null || result.getInserted() != rows.length) {
+                throw new IllegalStateException("Storage engine did not replace the complete table");
+            }
+            if (synchronousWrites()) {
+                storageEngine.flush();
+            }
+            return result;
+        } catch (UnsupportedOperationException e) {
+            throw e;
+        } catch (IOException e) {
+            storageEngine.setReadOnly(true);
+            throw new IllegalStateException("Unable to replace table "
+                    + slothTable.getTableName(), e);
         } catch (RuntimeException e) {
             storageEngine.setReadOnly(true);
             throw e;
@@ -277,5 +335,13 @@ public class SlothTableEngine implements LifeCycle {
 
     private boolean synchronousWrites() {
         return DspConfiguration.load().isStorageSynchronousWrites();
+    }
+
+    private StorageEngine mutationStorageEngine() {
+        if (storageEngines == null || storageEngines.size() != 1) {
+            throw new UnsupportedOperationException(
+                    "UPDATE and DELETE currently require a single-shard table");
+        }
+        return storageEngines.get(0);
     }
 }

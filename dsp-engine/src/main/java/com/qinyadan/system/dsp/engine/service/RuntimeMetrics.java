@@ -19,6 +19,9 @@ public final class RuntimeMetrics {
     private final LongAdder writesFailed = new LongAdder();
     private final LongAdder rowsWritten = new LongAdder();
     private final LongAdder idempotentReplays = new LongAdder();
+    private final LongAdder mutationsSucceeded = new LongAdder();
+    private final LongAdder mutationsFailed = new LongAdder();
+    private final LongAdder rowsMutated = new LongAdder();
 
     private RuntimeMetrics() {
     }
@@ -45,10 +48,20 @@ public final class RuntimeMetrics {
         idempotentReplays.increment();
     }
 
+    public void mutationSucceeded(long rows) {
+        mutationsSucceeded.increment();
+        rowsMutated.add(rows);
+    }
+
+    public void mutationFailed() {
+        mutationsFailed.increment();
+    }
+
     public MetricsSnapshot snapshot() {
         return new MetricsSnapshot(System.currentTimeMillis() - startedAt,
                 queriesSucceeded.sum(), queriesFailed.sum(), rowsReturned.sum(),
                 writesSucceeded.sum(), writesFailed.sum(), rowsWritten.sum(),
-                idempotentReplays.sum());
+                idempotentReplays.sum(), mutationsSucceeded.sum(),
+                mutationsFailed.sum(), rowsMutated.sum());
     }
 }

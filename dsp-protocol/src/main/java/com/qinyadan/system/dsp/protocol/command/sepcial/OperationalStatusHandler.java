@@ -60,6 +60,9 @@ public final class OperationalStatusHandler extends BaseHandler {
         rows.add(metric("writes_failed", metrics.getWritesFailed()));
         rows.add(metric("rows_written", metrics.getRowsWritten()));
         rows.add(metric("idempotent_replays", metrics.getIdempotentReplays()));
+        rows.add(metric("mutations_succeeded", metrics.getMutationsSucceeded()));
+        rows.add(metric("mutations_failed", metrics.getMutationsFailed()));
+        rows.add(metric("rows_mutated", metrics.getRowsMutated()));
         write(context, new String[]{"metric", "value"}, rows);
     }
 

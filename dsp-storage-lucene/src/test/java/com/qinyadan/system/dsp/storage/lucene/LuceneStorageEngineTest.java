@@ -174,6 +174,60 @@ public class LuceneStorageEngineTest {
         }
     }
 
+    @Test
+    public void replaceAllAtomicallyPublishesTheNewRowSet() throws Exception {
+        File index = temporaryFolder.newFolder("replace-index");
+        List<ColumnInfo> columns = columns();
+        StorageEngine engine = EngineRegistry.create("lucene",
+                new EngineConfig(index.getAbsolutePath(), columns,
+                        Collections.<String, Object>emptyMap()));
+        try {
+            engine.append(
+                    RowImpl.of(new Value(1, DataTypes.INTEGER),
+                            new Value("before-1", DataTypes.STRING),
+                            new Value(true, DataTypes.BOOLEAN)),
+                    RowImpl.of(new Value(2, DataTypes.INTEGER),
+                            new Value("before-2", DataTypes.STRING),
+                            new Value(false, DataTypes.BOOLEAN)));
+
+            assertEquals(1, engine.replaceAll(RowImpl.of(
+                    new Value(3, DataTypes.INTEGER),
+                    new Value("after", DataTypes.STRING),
+                    new Value(true, DataTypes.BOOLEAN))).getInserted());
+
+            List<Row> rows = scanAll(engine, columns);
+            assertEquals(1, rows.size());
+            assertEquals(3, rows.get(0).getColumn(0).intValue().intValue());
+            assertEquals("after", rows.get(0).getColumn(1).stringValue());
+
+            try {
+                engine.replaceAll(RowImpl.of(
+                        new Value(4, DataTypes.INTEGER),
+                        new Value("valid", DataTypes.STRING),
+                        new Value(true, DataTypes.BOOLEAN)), null);
+            } catch (IllegalArgumentException expected) {
+                assertTrue(expected.getMessage().contains("must not contain null"));
+            }
+            assertEquals(1, scanAll(engine, columns).size());
+
+            assertEquals(0, engine.replaceAll().getInserted());
+            assertTrue(scanAll(engine, columns).isEmpty());
+            engine.flush();
+            engine.close();
+
+            StorageEngine reopened = EngineRegistry.create("lucene",
+                    new EngineConfig(index.getAbsolutePath(), columns,
+                            Collections.<String, Object>emptyMap()));
+            try {
+                assertTrue(scanAll(reopened, columns).isEmpty());
+            } finally {
+                reopened.close();
+            }
+        } finally {
+            engine.close();
+        }
+    }
+
     private static List<Row> scanAll(StorageEngine engine, List<ColumnInfo> columns)
             throws Exception {
         Set<String> names = new java.util.LinkedHashSet<>();

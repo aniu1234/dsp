@@ -59,4 +59,14 @@ public class WriteTableTest {
 
         request.getRows().get(0).clear();
     }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void mutationAssignmentsAreImmutable() {
+        MutationRequest request = new MutationRequest(MutationOperation.UPDATE,
+                "app", "users", null, "id = 1",
+                Collections.singletonList(new MutationAssignment(
+                        "id", "id + 1", false, false)));
+
+        request.getAssignments().clear();
+    }
 }

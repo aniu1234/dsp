@@ -105,6 +105,42 @@ public class LuceneStorageEngine implements StorageEngine {
     }
 
     @Override
+    public synchronized WriteResult replaceAll(Row... rows) throws IOException {
+        ensureOpen();
+        if (readOnly) {
+            throw new IllegalStateException("Lucene storage engine is read only: " + storagePath);
+        }
+        if (rows == null) {
+            throw new IllegalArgumentException("Replacement rows must not be null");
+        }
+
+        // Materialize and validate every document before the index is touched.
+        List<Document> documents = new ArrayList<>(rows.length);
+        for (Row row : rows) {
+            if (row == null) {
+                throw new IllegalArgumentException("Replacement rows must not contain null");
+            }
+            documents.add(mapper.toDocument(row));
+        }
+
+        // Establish a durable rollback point for any earlier asynchronous appends.
+        flush();
+        try {
+            indexWriter.deleteAll();
+            if (!documents.isEmpty()) {
+                indexWriter.addDocuments(documents);
+            }
+            searcherManager.maybeRefreshBlocking();
+            // A delete-to-empty replacement is still dirty and must be committed later.
+            uncommittedRows.set(Math.max(1, rows.length));
+            return new WriteResult(rows.length, System.currentTimeMillis());
+        } catch (IOException e) {
+            rollbackReplacement(e);
+            throw e;
+        }
+    }
+
+    @Override
     public Iterator<Row> scan(QueryContext queryContext) throws IOException {
         ensureOpen();
         Set<String> requestedColumns = queryContext == null ? null : queryContext.getColumnNames();
@@ -237,6 +273,33 @@ public class LuceneStorageEngine implements StorageEngine {
             } catch (IOException e) {
                 LOG.error("Failed to close Lucene directory", e);
             }
+        }
+    }
+
+    private void rollbackReplacement(IOException failure) {
+        if (searcherManager != null) {
+            try {
+                searcherManager.close();
+            } catch (IOException e) {
+                failure.addSuppressed(e);
+            }
+            searcherManager = null;
+        }
+        if (indexWriter != null) {
+            try {
+                indexWriter.rollback();
+            } catch (IOException e) {
+                failure.addSuppressed(e);
+            }
+            indexWriter = null;
+        }
+        uncommittedRows.set(0);
+        try {
+            indexWriter = new IndexWriter(directory, new IndexWriterConfig());
+            searcherManager = new SearcherManager(indexWriter, new SearcherFactory());
+        } catch (IOException e) {
+            failure.addSuppressed(e);
+            readOnly = true;
         }
     }
 

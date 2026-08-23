@@ -58,7 +58,7 @@ DSP 当前不是面向生产核心业务的通用关系数据库，不承诺事�
 
 Catalog 与表数据在进程重启后恢复。DDL 失败时会尝试回滚内存目录、元数据和表目录变更。
 
-### 3.3 数据写入
+### 3.3 数据写入与变更
 
 当前支持 `INSERT ... VALUES`：
 
@@ -75,7 +75,16 @@ Catalog 与表数据在进程重启后恢复。DDL 失败时会尝试回滚内�
 
 幂等记录是有界、带过期时间的进程内缓存，目前不跨重启持久化，也不跨节点共享。
 
-当前不支持 `INSERT ... SELECT`、`UPDATE`、`DELETE`、UPSERT、唯一键约束和跨语句事务。
+P2.1 已增加单分片 Lucene 表的自动提交 `UPDATE` 与 `DELETE`：
+
+- `WHERE` 条件和 UPDATE 右侧表达式复用查询执行器；
+- 支持多列赋值、`NULL` 和 `DEFAULT`；
+- 在触碰存储前计算并校验全部匹配行，超过变更行数上限时整条语句失败；
+- UPDATE 返回实际发生变化的行数，DELETE 返回删除行数；
+- Lucene 先校验完整替换集，再一次发布新行集；替换 I/O 失败时尝试回滚到变更前的持久化检查点；
+- 多分片表的 UPDATE/DELETE 会明确返回不支持，避免伪造跨分片原子性。
+
+当前不支持 `INSERT ... SELECT`、UPSERT、唯一键约束和跨语句事务。
 系统会明确拒绝 `BEGIN`、`COMMIT`、`ROLLBACK` 和 `START TRANSACTION`，不会模拟成功。
 
 ### 3.4 SQL 查询
@@ -105,10 +114,11 @@ SQL 兼容性以项目测试覆盖为准，不应假设支持完整 MySQL 方言
 | `DSP_QUERY_MAX_RESULT_ROWS` | `100000` | 单次查询最多返回行数 |
 | `DSP_QUERY_MAX_MATERIALIZED_ROWS` | `100000` | 排序、JOIN 构建侧、聚合和去重最大内存条目数 |
 | `DSP_WRITE_MAX_ROWS_PER_INSERT` | `10000` | 单条 INSERT 最大行数 |
+| `DSP_WRITE_MAX_ROWS_PER_MUTATION` | `10000` | 单条 UPDATE/DELETE 最多匹配行数 |
 | `DSP_WRITE_IDEMPOTENCY_TTL_MS` | `300000` | 写入幂等键保留时间 |
 | `DSP_WRITE_IDEMPOTENCY_MAX_KEYS` | `10000` | 进程内最多保留的幂等键数量 |
 | `DSP_STORAGE_SCAN_PAGE_SIZE` | `512` | Lucene 单次扫描页大小 |
-| `DSP_STORAGE_SYNC_WRITES` | `true` | INSERT 成功响应前是否 flush |
+| `DSP_STORAGE_SYNC_WRITES` | `true` | 写入或变更成功响应前是否 flush |
 
 这些参数用于限制单进程原型的资源风险，不等同于租户隔离、配额系统或完整工作负载管理。
 
@@ -152,7 +162,7 @@ USE demo;
 CREATE TABLE users (
   id INTEGER UNSIGNED NOT NULL,
   name VARCHAR(32) NOT NULL DEFAULT 'guest'
-) ENGINE = lucene SHARD = 2;
+) ENGINE = lucene;
 ```
 
 ### 4.3 写入与查询
@@ -166,6 +176,9 @@ SELECT id, name
 FROM users
 WHERE id > 0
 ORDER BY id;
+
+UPDATE users SET name = 'Member' WHERE id = 1;
+DELETE FROM users WHERE id = 2;
 
 EXPLAIN SELECT id, name FROM users WHERE id = 1;
 ```
@@ -183,8 +196,8 @@ SHOW DSP HEALTH;
 SHOW DSP METRICS;
 ```
 
-健康检查返回 Catalog、表、存储实例和只读实例数量；指标返回查询/写入成功与失败次数、
-处理行数、幂等重放次数和进程运行时间。指标目前只保存在当前进程内，重启后重新计数。
+健康检查返回 Catalog、表、存储实例和只读实例数量；指标返回查询、写入和 mutation
+成功与失败次数、处理行数、幂等重放次数和进程运行时间。指标目前只保存在当前进程内，重启后重新计数。
 当前版本仍没有独立管理控制台、在线备份命令或外部指标采集协议。
 
 ## 5. 部署与配置
@@ -224,7 +237,7 @@ SHOW DSP METRICS;
 | 本地持久化 | 可用（预览） | JSON Catalog + Lucene |
 | 多分片表 | 基础支持 | 语句级轮询写入，查询合并扫描 |
 | ACID 事务 | 不支持 | 事务命令明确报错 |
-| UPDATE / DELETE | 不支持 | 当前只有 INSERT VALUES 写入路径 |
+| UPDATE / DELETE | 可用（预览） | 仅单分片 Lucene 表、单语句自动提交 |
 | 高可用与复制 | 未接入 | Raft/Register 尚属独立子系统 |
 | 联邦查询 | 独立实验能力 | Connector 未接入主产品入口 |
 | 多租户与权限系统 | 不支持 | 当前为单静态账号 |
@@ -250,9 +263,10 @@ SHOW DSP METRICS;
 - 增加统一的 `DspConfiguration` 配置解析与启动校验；
 - 增加 `SHOW DSP HEALTH` 和 `SHOW DSP METRICS`。
 
-### P2：完善单节点数据库能力
+### P2：完善单节点数据库能力（进行中）
 
-- 增加 UPDATE、DELETE 和更多数据类型；
+- [x] P2.1：增加单分片自动提交 UPDATE、DELETE、DEFAULT 赋值和 mutation 资源保护；
+- [ ] 增加更多数据类型；
 - 明确并实现事务模型；
 - 将幂等记录升级为可持久化、可跨节点协调的提交记录；
 - 增加索引、约束和统计信息管理；

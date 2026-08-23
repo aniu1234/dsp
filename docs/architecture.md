@@ -92,16 +92,22 @@ dsp-protocol ───────────────> dsp-engine ───
    配置统一由 `DspConfiguration` 解析；服务启动前执行完整校验。
 9. **基础可观测性**：`HealthService` 检查数据目录和存储只读状态，`RuntimeMetrics` 记录
    查询/写入计数和行数，并通过 MySQL 命令暴露只读快照。
+10. **P2.1 单表 Mutation 边界**：协议层把 Calcite UPDATE/DELETE AST 转换为中立
+    `MutationRequest`，`MutationService` 负责条件执行、表达式求值、整批约束校验和表级写
+    串行化；存储 API 用可选 `replaceAll` 契约保持 append-only 插件兼容。当前只允许单分片
+    mutation，避免在事务模型完成前承诺跨分片原子可见性。
 
 ### 下一阶段（按优先级）
 
-1. **语句分发 DTO 化**：当前 SELECT、EXPLAIN、SHOW 和写入响应已经隔离内部对象；下一步
+1. **事务与提交契约**：在单分片自动提交 mutation 的基础上定义提交日志、恢复点和事务
+   状态机，再决定多分片 UPDATE/DELETE 的协调方式。
+2. **语句分发 DTO 化**：当前 SELECT、EXPLAIN、SHOW 和写入响应已经隔离内部对象；下一步
    继续移除通用命令分发路径中的 `SqlNode` 暴露。
-2. **统一 connector 接入方式**：在应用装配层消费 `SchemaConnectorRegistry` 的健康状态，
+3. **统一 connector 接入方式**：在应用装配层消费 `SchemaConnectorRegistry` 的健康状态，
    将外部 Schema 作为 Catalog 的只读数据源接入，而不是让主链依赖具体 connector。
-3. **持久化提交契约**：把当前进程内有界幂等缓存升级为提交日志，再定义跨重启、跨节点
+4. **持久化幂等契约**：把当前进程内有界幂等缓存升级为提交日志，再定义跨重启、跨节点
    幂等和跨分片事务语义；在此之前保持 statement/batch 原子边界并拒绝事务命令。
-4. **控制面通过端口接入**：为节点注册、拓扑和领导者状态定义 engine-neutral 接口，
+5. **控制面通过端口接入**：为节点注册、拓扑和领导者状态定义 engine-neutral 接口，
    由应用层适配 `dsp-raft` / `dsp-register`，禁止查询引擎反向依赖集群实现。
-5. **拆分部署保持可选**：当前先维持单进程模块化，只有当资源隔离、独立伸缩或故障域
+6. **拆分部署保持可选**：当前先维持单进程模块化，只有当资源隔离、独立伸缩或故障域
    数据证明有收益时，再把协议、查询和存储拆成独立进程。

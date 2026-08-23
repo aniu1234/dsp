@@ -20,6 +20,7 @@ public final class DspConfiguration {
     private final int queryMaxResultRows;
     private final int queryMaxMaterializedRows;
     private final int writeMaxRowsPerInsert;
+    private final int writeMaxRowsPerMutation;
     private final long writeIdempotencyTtlMillis;
     private final int writeIdempotencyMaxKeys;
     private final int storageScanPageSize;
@@ -42,6 +43,8 @@ public final class DspConfiguration {
                 "DSP_QUERY_MAX_MATERIALIZED_ROWS", 100000, 1, Integer.MAX_VALUE);
         writeMaxRowsPerInsert = integer("dsp.write.max-rows-per-insert",
                 "DSP_WRITE_MAX_ROWS_PER_INSERT", 10000, 1, Integer.MAX_VALUE);
+        writeMaxRowsPerMutation = integer("dsp.write.max-rows-per-mutation",
+                "DSP_WRITE_MAX_ROWS_PER_MUTATION", 10000, 1, Integer.MAX_VALUE);
         writeIdempotencyTtlMillis = longValue("dsp.write.idempotency-ttl-ms",
                 "DSP_WRITE_IDEMPOTENCY_TTL_MS", 300000L, 1000L, Long.MAX_VALUE);
         writeIdempotencyMaxKeys = integer("dsp.write.idempotency-max-keys",
@@ -81,6 +84,7 @@ public final class DspConfiguration {
     public int getQueryMaxResultRows() { return queryMaxResultRows; }
     public int getQueryMaxMaterializedRows() { return queryMaxMaterializedRows; }
     public int getWriteMaxRowsPerInsert() { return writeMaxRowsPerInsert; }
+    public int getWriteMaxRowsPerMutation() { return writeMaxRowsPerMutation; }
     public long getWriteIdempotencyTtlMillis() { return writeIdempotencyTtlMillis; }
     public int getWriteIdempotencyMaxKeys() { return writeIdempotencyMaxKeys; }
     public int getStorageScanPageSize() { return storageScanPageSize; }

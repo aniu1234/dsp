@@ -146,15 +146,25 @@ public final class WriteService {
     }
 
     private void validate(WriteTable table, List<List<Value>> rows) {
+        validateRows(table, rows, maximumRowsPerInsert(), true);
+    }
+
+    void validateMutationRows(WriteTable table, List<List<Value>> rows) {
+        validateRows(table, rows,
+                DspConfiguration.load().getWriteMaxRowsPerMutation(), false);
+    }
+
+    private void validateRows(WriteTable table, List<List<Value>> rows,
+                              int maximumRows, boolean requireRows) {
         if (rows == null) {
             throw failure(WriteErrorCode.INVALID_REQUEST,
-                    "Rows to insert must not be null");
+                    "Rows to write must not be null");
         }
-        if (rows.isEmpty()) {
+        if (requireRows && rows.isEmpty()) {
             throw failure(WriteErrorCode.INVALID_REQUEST,
                     "Rows to insert must not be empty");
         }
-        if (rows.size() > maximumRowsPerInsert()) {
+        if (rows.size() > maximumRows) {
             throw failure(WriteErrorCode.RESOURCE_LIMIT,
                     "Write exceeds the configured row limit");
         }

@@ -70,6 +70,11 @@ public class SqlEndToEndTest {
                 + "ENGINE = lucene"));
         assertOk(execute("CREATE TABLE write_rules (id INTEGER UNSIGNED NOT NULL, "
                 + "code VARCHAR(3) NOT NULL) ENGINE = lucene"));
+        assertOk(execute("CREATE TABLE mutation_rows (id INTEGER NOT NULL, "
+                + "name VARCHAR(8) NOT NULL DEFAULT 'guest', score INTEGER NOT NULL) "
+                + "ENGINE = lucene"));
+        assertOk(execute("CREATE TABLE sharded_mutation (id INTEGER NOT NULL) "
+                + "ENGINE = lucene SHARD = 2"));
 
         assertOk(execute("INSERT INTO users(id) VALUES (1)"));
         assertOk(execute("INSERT INTO users(id, name) VALUES (2, 'member'), (3, NULL)"));
@@ -203,10 +208,73 @@ public class SqlEndToEndTest {
                 "INSERT INTO users(id, name) VALUES (10, 'conflict') "
                         + "/* dsp:idempotency-key=users-9 */")));
 
+        assertOk(execute("INSERT INTO mutation_rows(id, name, score) VALUES "
+                + "(1, 'first', 10), (2, 'second', 20), (3, 'third', 30)"));
+        byte[] update = execute("UPDATE mutation_rows SET name = 'updated', "
+                + "score = score + 5 WHERE id = 1");
+        assertOk(update);
+        assertEquals(1, affectedRows(update));
+        assertEquals(Arrays.asList(Arrays.asList("1", "updated", "15")),
+                resultRows(execute("SELECT id, name, score FROM mutation_rows WHERE id = 1"), 3));
+
+        byte[] noChange = execute("UPDATE mutation_rows SET score = score WHERE id = 1");
+        assertOk(noChange);
+        assertEquals(0, affectedRows(noChange));
+        byte[] nullUpdate = execute(
+                "UPDATE mutation_rows SET name = NULL WHERE id >= 2");
+        assertEquals(errorMessage(nullUpdate), 1048, errorCode(nullUpdate));
+        assertEquals(Arrays.asList(
+                        Arrays.asList("2", "second", "20"),
+                        Arrays.asList("3", "third", "30")),
+                resultRows(execute("SELECT id, name, score FROM mutation_rows "
+                        + "WHERE id >= 2 ORDER BY id"), 3));
+
+        String previousMutationLimit =
+                System.getProperty("dsp.write.max-rows-per-mutation");
+        System.setProperty("dsp.write.max-rows-per-mutation", "1");
+        try {
+            assertEquals(1226, errorCode(execute(
+                    "UPDATE mutation_rows SET score = score + 1 WHERE id >= 2")));
+        } finally {
+            restoreProperty("dsp.write.max-rows-per-mutation", previousMutationLimit);
+        }
+        assertEquals(Arrays.asList(Arrays.asList("2", "20"), Arrays.asList("3", "30")),
+                resultRows(execute("SELECT id, score FROM mutation_rows "
+                        + "WHERE id >= 2 ORDER BY id"), 2));
+
+        byte[] useDefault = execute(
+                "UPDATE mutation_rows SET name = DEFAULT WHERE id = 3");
+        assertOk(useDefault);
+        assertEquals(1, affectedRows(useDefault));
+        assertEquals(Arrays.asList(Arrays.asList("guest")),
+                resultRows(execute("SELECT name FROM mutation_rows WHERE id = 3"), 1));
+
+        byte[] aliasUpdate = execute("UPDATE mutation_rows AS m "
+                + "SET score = m.score + 2 WHERE m.id = 3");
+        assertOk(aliasUpdate);
+        assertEquals(1, affectedRows(aliasUpdate));
+        assertEquals(Arrays.asList(Arrays.asList("32")),
+                resultRows(execute("SELECT score FROM mutation_rows WHERE id = 3"), 1));
+        assertEquals(1054, errorCode(execute(
+                "UPDATE mutation_rows SET missing = 1 WHERE id = 1")));
+        assertEquals(1110, errorCode(execute(
+                "UPDATE mutation_rows SET score = 1, score = 2 WHERE id = 1")));
+
+        byte[] delete = execute("DELETE FROM mutation_rows WHERE id = 2");
+        assertOk(delete);
+        assertEquals(1, affectedRows(delete));
+        assertEquals(new ArrayList<List<String>>(),
+                resultRows(execute("SELECT id FROM mutation_rows WHERE id = 2"), 1));
+        assertEquals(1235, errorCode(execute(
+                "UPDATE sharded_mutation SET id = 2 WHERE id = 1")));
+        assertEquals(1235, errorCode(execute(
+                "DELETE FROM sharded_mutation WHERE id = 1")));
+
         List<List<String>> health = resultRows(execute("SHOW DSP HEALTH"), 7);
         assertEquals("UP", health.get(0).get(0));
         List<List<String>> metrics = resultRows(execute("SHOW DSP METRICS"), 2);
         assertTrue(metrics.stream().anyMatch(row -> "idempotent_replays".equals(row.get(0))));
+        assertTrue(metrics.stream().anyMatch(row -> "rows_mutated".equals(row.get(0))));
         assertEquals(1235, errorCode(execute("BEGIN")));
         assertEquals(1235, errorCode(execute("SELECT @@not_a_dsp_variable")));
     }
@@ -246,6 +314,14 @@ public class SqlEndToEndTest {
         byte[] payload = payloads(response).get(0);
         assertEquals(0xff, payload[0] & 0xff);
         return (payload[1] & 0xff) | ((payload[2] & 0xff) << 8);
+    }
+
+    private static String errorMessage(byte[] response) {
+        byte[] payload = payloads(response).get(0);
+        int offset = payload.length > 9 && payload[3] == '#'
+                ? 9 : Math.min(3, payload.length);
+        return new String(payload, offset, payload.length - offset,
+                StandardCharsets.UTF_8);
     }
 
     private static int affectedRows(byte[] response) {

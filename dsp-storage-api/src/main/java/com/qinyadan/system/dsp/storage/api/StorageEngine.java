@@ -22,6 +22,18 @@ public interface StorageEngine {
     WriteResult append(Row... rows) throws IOException;
 
     /**
+     * Replace the complete visible row set as one storage-level mutation.
+     *
+     * <p>Implementations that support mutations must validate the replacement batch
+     * before changing visible state. The default keeps append-only engines compatible
+     * while making unsupported mutation explicit.</p>
+     */
+    default WriteResult replaceAll(Row... rows) throws IOException {
+        throw new UnsupportedOperationException(
+                "Full-table replacement is not supported by " + getClass().getSimpleName());
+    }
+
+    /**
      * Scan rows matching the query.
      */
     Iterator<Row> scan(QueryContext queryContext) throws IOException;

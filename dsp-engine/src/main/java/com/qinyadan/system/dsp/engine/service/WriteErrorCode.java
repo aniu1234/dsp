@@ -2,10 +2,13 @@ package com.qinyadan.system.dsp.engine.service;
 
 public enum WriteErrorCode {
     UNKNOWN_TABLE,
+    UNKNOWN_COLUMN,
+    DUPLICATE_COLUMN,
     RESOURCE_LIMIT,
     INVALID_REQUEST,
     TYPE_MISMATCH,
     CONSTRAINT_VIOLATION,
     IDEMPOTENCY_CONFLICT,
+    UNSUPPORTED_OPERATION,
     STORAGE_FAILURE
 }

@@ -77,4 +77,5 @@ mysql -h127.0.0.1 -P3016 -uroot -p --ssl-mode=disabled
 - [x] Phase 7: 移除 dsp-core 的 Calcite 依赖并增加构建边界
 - [x] Phase 8: 增加 Query/Catalog/Environment/Write 服务门面
 - [x] Phase 9: P1 服务 DTO、统一配置、写入幂等与基础可观测性
-- [ ] Phase 10: 持久化提交日志、事务契约与外部指标采集
+- [x] Phase 10: P2.1 单分片自动提交 UPDATE/DELETE 与存储替换契约
+- [ ] Phase 11: 持久化提交日志、事务契约与外部指标采集
