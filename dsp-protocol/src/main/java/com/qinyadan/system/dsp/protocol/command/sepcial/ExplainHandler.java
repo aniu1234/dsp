@@ -7,8 +7,7 @@ import com.qinyadan.system.dsp.protocol.pkg.ResultSetHolder;
 import com.qinyadan.system.dsp.protocol.pkg.netty.ConnectionContext;
 import com.qinyadan.system.dsp.protocol.utils.PackageUtils;
 import com.qinyadan.system.dsp.protocol.visitor.EnvironmentReplaceVisitor;
-import com.qinyadan.system.dsp.engine.calcite.ParserFactory;
-import com.qinyadan.system.dsp.engine.calcite.SlothParser;
+import com.qinyadan.system.dsp.engine.service.QueryService;
 import io.netty.buffer.ByteBuf;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.calcite.plan.RelOptUtil;
@@ -33,12 +32,11 @@ public class ExplainHandler extends BaseHandler {
     public void handle(ConnectionContext connectionContext, String type) {
 
         final String query = type.split(StringConstants.SPACE, 2)[1];
-        final SlothParser slothParser = ParserFactory.getParser(query, connectionContext.getDb());
-
         ByteBuf result;
         try {
-            final SqlNode sqlNode = slothParser.getSqlNode(query);
-            final RelNode relNode = slothParser.getPlan(sqlNode.accept(new EnvironmentReplaceVisitor(connectionContext)));
+            final SqlNode sqlNode = QueryService.INSTANCE.parse(query, connectionContext.getDb());
+            final RelNode relNode = QueryService.INSTANCE.plan(query, connectionContext.getDb(),
+                    sqlNode.accept(new EnvironmentReplaceVisitor(connectionContext)));
             final String planString = StringConstants.LINE_SEPARATOR + RelOptUtil.toString(relNode, SqlExplainLevel.ALL_ATTRIBUTES);
             final List<List<String>> data = Lists.newArrayList();
             data.add(Lists.newArrayList(planString));

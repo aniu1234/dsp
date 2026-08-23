@@ -1,34 +1,31 @@
 package com.qinyadan.system.dsp.protocol.command.sqlnode;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.qinyadan.system.dsp.constant.StringConstants;
-import com.qinyadan.system.dsp.protocol.pkg.MysqlPackage;
-import com.qinyadan.system.dsp.protocol.pkg.netty.ConnectionContext;
-import com.qinyadan.system.dsp.protocol.utils.PackageUtils;
 import com.qinyadan.system.dsp.core.data.type.DataType;
 import com.qinyadan.system.dsp.core.data.value.Value;
 import com.qinyadan.system.dsp.core.util.StringUtil;
-import com.qinyadan.system.dsp.engine.calcite.EnhanceSlothColumn;
-import com.qinyadan.system.dsp.engine.calcite.SlothColumn;
-import com.qinyadan.system.dsp.engine.calcite.SlothTableEngine;
-import com.qinyadan.system.dsp.engine.calcite.SlothSchema;
-import com.qinyadan.system.dsp.engine.calcite.SlothSchemaHolder;
-import com.qinyadan.system.dsp.engine.calcite.SlothTable;
+import com.qinyadan.system.dsp.engine.service.CatalogService;
+import com.qinyadan.system.dsp.engine.service.WriteService;
+import com.qinyadan.system.dsp.engine.service.dto.WriteColumn;
+import com.qinyadan.system.dsp.engine.service.dto.WriteTable;
+import com.qinyadan.system.dsp.protocol.pkg.MysqlPackage;
+import com.qinyadan.system.dsp.protocol.pkg.netty.ConnectionContext;
+import com.qinyadan.system.dsp.protocol.utils.PackageUtils;
+import com.qinyadan.system.dsp.storage.api.WriteResult;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.collections4.ListUtils;
-import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
+import java.util.Set;
 
 import static com.qinyadan.system.dsp.constant.ErrorCodeAndMessageEnum.*;
 
@@ -46,11 +43,21 @@ public class SqlInsertHandler implements Handler<SqlInsert> {
 
         // INSERT ... SELECT is deliberately rejected until it can provide the
         // same validation and durability guarantees as VALUES inserts.
-        if (!(type.getSource() instanceof SqlBasicCall)) {
+        if (!(type.getSource() instanceof SqlBasicCall)
+                || ((SqlBasicCall) type.getSource()).getOperator()
+                != SqlStdOperatorTable.VALUES) {
             writeUnsupportedInsertSource(connectionContext);
             return;
         }
         final List<SqlNode> operands = ((SqlBasicCall) type.getSource()).getOperandList();
+        int maxRows = WriteService.INSTANCE.maximumRowsPerInsert();
+        if (operands.size() > maxRows) {
+            connectionContext.write(PackageUtils.buildErrPackage(
+                    WRITE_RESOURCE_LIMIT.getCode(),
+                    String.format(WRITE_RESOURCE_LIMIT.getMessage(),
+                            "INSERT contains " + operands.size() + " rows; limit is " + maxRows)));
+            return;
+        }
 
         final String tableAndDb = table.toString();
         final Pair<String, String> dbAndTablePair =
@@ -58,31 +65,33 @@ public class SqlInsertHandler implements Handler<SqlInsert> {
         final String db = dbAndTablePair.getLeft();
         final String tableName = dbAndTablePair.getRight();
 
-        final SlothTable slothTable = checkTableAndDb(connectionContext, db, tableName);
-        if (Objects.isNull(slothTable)) {
+        final WriteTable writeTable = checkTableAndDb(connectionContext, db, tableName);
+        if (Objects.isNull(writeTable)) {
             return;
         }
 
-        final SlothTableEngine slothTableEngine = slothTable.getSlothTableEngine();
-        final List<String> columnsNames = checkAndGetColumnName(connectionContext, slothTableEngine, columnList);
+        final List<String> columnsNames = checkAndGetColumnName(
+                connectionContext, writeTable, columnList);
         if (Objects.isNull(columnsNames)) {
             return;
         }
 
         final List<List<Value>> valueList = extractColumnValue(connectionContext, operands,
-                slothTableEngine, columnsNames);
+                writeTable, columnsNames);
 
         if (Objects.isNull(valueList)) {
             return;
         }
 
-        slothTableEngine.insert(valueList);
+        WriteResult writeResult = WriteService.INSTANCE.insert(db, tableName, valueList);
 
-        final MysqlPackage r = PackageUtils.buildOkMySqlPackage(valueList.size(), 1, 0);
+        final MysqlPackage r = PackageUtils.buildOkMySqlPackage(
+                writeResult.getInserted(), 1, 0);
         connectionContext.write(r);
     }
 
-    private SlothTable checkTableAndDb(ConnectionContext connectionContext, String db, String tableName) {
+    private WriteTable checkTableAndDb(ConnectionContext connectionContext,
+                                       String db, String tableName) {
         MysqlPackage r;
 
         //check whether has used db
@@ -93,16 +102,16 @@ public class SqlInsertHandler implements Handler<SqlInsert> {
         }
 
         //check whether db exists
-        final SlothSchema slothSchema = SlothSchemaHolder.INSTANCE.getSlothSchema(db);
-        if (Objects.isNull(slothSchema)) {
-            r = PackageUtils.buildErrPackage(NO_DATABASE_SELECTED.getCode(), NO_DATABASE_SELECTED.getMessage());
+        if (!CatalogService.INSTANCE.databaseExists(db)) {
+            r = PackageUtils.buildErrPackage(UNKNOWN_DB_NAME.getCode(),
+                    String.format(UNKNOWN_DB_NAME.getMessage(), db));
             connectionContext.write(r);
             return null;
         }
 
         //check whether table exists
-        final SlothTable slothTable = (SlothTable) slothSchema.getTable(tableName);
-        if (Objects.isNull(slothTable)) {
+        final WriteTable writeTable = WriteService.INSTANCE.describe(db, tableName);
+        if (Objects.isNull(writeTable)) {
             r = PackageUtils.buildErrPackage(
                     TABLE_NOT_EXISTS.getCode(),
                     String.format(TABLE_NOT_EXISTS.getMessage(), db + StringConstants.DOT + tableName));
@@ -110,69 +119,51 @@ public class SqlInsertHandler implements Handler<SqlInsert> {
             return null;
         }
 
-        return slothTable;
+        return writeTable;
     }
 
     private List<String> checkAndGetColumnName(ConnectionContext connectionContext,
-                                               SlothTableEngine slothTableEngine, SqlNodeList sqlNodes) {
+                                               WriteTable writeTable, SqlNodeList sqlNodes) {
 
         //insert to t values()....., do not check column name and size
-        final List<String> allColumnNames = slothTableEngine.getColumnNames();
+        final List<String> allColumnNames = writeTable.getColumnNames();
         if (Objects.isNull(sqlNodes)) {
             return allColumnNames;
         }
 
-        final List<String> columnsNames = sqlNodes.getList().stream()
-                .map(SqlNode::toString)
-                .collect(Collectors.toList());
-
-
-        final List<String> unknowColumns = ListUtils.removeAll(columnsNames, allColumnNames);
-
-        //insert into t(c1, c2) values(1, 2) and c1 does not exsit in table
-        if (CollectionUtils.isNotEmpty(unknowColumns)) {
-            MysqlPackage mysqlPackage = PackageUtils.buildErrPackage(
-                    UNKONW_COLUMN_NAME.getCode(),
-                    String.format(UNKONW_COLUMN_NAME.getMessage(), unknowColumns.toString()));
-
-            connectionContext.write(mysqlPackage);
-            return null;
+        List<String> resolvedNames = new ArrayList<>(sqlNodes.size());
+        Set<String> seen = new HashSet<>();
+        for (SqlNode sqlNode : sqlNodes) {
+            String requestedName = sqlNode instanceof SqlIdentifier
+                    && ((SqlIdentifier) sqlNode).isSimple()
+                    ? ((SqlIdentifier) sqlNode).getSimple() : sqlNode.toString();
+            WriteColumn column = writeTable.getColumn(requestedName);
+            if (column == null) {
+                connectionContext.write(PackageUtils.buildErrPackage(
+                        UNKONW_COLUMN_NAME.getCode(),
+                        String.format(UNKONW_COLUMN_NAME.getMessage(), requestedName)));
+                return null;
+            }
+            String canonicalName = column.getName();
+            if (!seen.add(canonicalName.toLowerCase(Locale.ROOT))) {
+                connectionContext.write(PackageUtils.buildErrPackage(
+                        COLUMN_EXIST_TWICE.getCode(),
+                        String.format(COLUMN_EXIST_TWICE.getMessage(), requestedName)));
+                return null;
+            }
+            resolvedNames.add(canonicalName);
         }
-
-        //insert into t(c1, c2) values(2, 2) c1 exists twice
-        final List<Pair<String, Integer>> pairs = columnsNames.stream()
-                .collect(Collectors.groupingBy(f -> f))
-                .entrySet()
-                .stream()
-                .map(entry -> new ImmutablePair<>(entry.getKey(), entry.getValue().size()))
-                .filter(immutablePair -> immutablePair.right > 1)
-                .collect(Collectors.toList());
-
-        if (CollectionUtils.isNotEmpty(pairs)) {
-            MysqlPackage mysqlPackage = PackageUtils.buildErrPackage(
-                    UNKONW_COLUMN_NAME.getCode(),
-                    String.format(COLUMN_EXIST_TWICE.getMessage(), pairs.get(0).getLeft()));
-
-            connectionContext.write(mysqlPackage);
-            return null;
-        }
-
-        return columnsNames;
+        return resolvedNames;
     }
 
     private List<List<Value>> extractColumnValue(ConnectionContext connectionContext,
                                                  List<SqlNode> rows,
-                                                 SlothTableEngine slothTableEngine,
+                                                 WriteTable writeTable,
                                                  List<String> columnList) {
 
-        final List<List<Value>> rs = Lists.newArrayList();
+        final List<List<Value>> rs = new ArrayList<>();
 
-        final List<String> allColumns = slothTableEngine.getColumnNames();
-        final Map<String, DataType> map = slothTableEngine.getColumnAndDataType();
-        final Map<String, SlothColumn> definitions = new HashMap<>();
-        for (SlothColumn column : slothTableEngine.getSlothTable().getColumns()) {
-            definitions.put(column.getColumnName(), column);
-        }
+        final List<String> allColumns = writeTable.getColumnNames();
 
         int rowCount = rows.size();
         for (int i = 0; i < rowCount; i++) {
@@ -200,11 +191,11 @@ public class SqlInsertHandler implements Handler<SqlInsert> {
                 return null;
             }
 
-            final Map<String, Value> columnNameAndValue = Maps.newHashMap();
+            final Map<String, Value> columnNameAndValue = new HashMap<>();
             for (int j = 0; j < columnSize; j++) {
                 final String colName = columnList.get(j);
-                final DataType dataType = map.get(colName);
-                final SlothColumn column = definitions.get(colName);
+                final WriteColumn column = writeTable.getColumn(colName);
+                final DataType dataType = column.getDataType();
 
                 SqlNode node = rowValues.get(j);
                 Value v;
@@ -212,26 +203,16 @@ public class SqlInsertHandler implements Handler<SqlInsert> {
                 try {
                     if (node.getKind() == SqlKind.DEFAULT) {
                         v = defaultValue(column, dataType);
-                    } else if (SqlUtil.isNullLiteral(node, false)) {
-                        v = dataType.createByType(null);
-                    } else if (node instanceof SqlNumericLiteral) {
-                        BigDecimal decimal = (BigDecimal) ((SqlNumericLiteral) node).getValue();
-                        v = dataType.createByType(decimal);
-                    } else if (node instanceof SqlCharStringLiteral) {
-                        SqlCharStringLiteral sqlCharStringLiteral = (SqlCharStringLiteral) node;
-                        final String stringValue = sqlCharStringLiteral.getNlsString().getValue();
-                        v = dataType.createByType(stringValue);
-                    } else if (node instanceof SqlLiteral) {
-                        v = dataType.createByType(((SqlLiteral) node).getValue());
                     } else {
-                        log.warn("Unsupported INSERT expression: {}", node);
-                        MysqlPackage mysqlPackage = PackageUtils.buildSyntaxErrPackage(
-                                connectionContext.getQueryString());
-                        connectionContext.write(mysqlPackage);
-                        return null;
+                        v = literalValue(node, dataType);
                     }
                     validateColumnValue(column, v);
-                } catch (IllegalArgumentException e) {
+                } catch (UnsupportedOperationException e) {
+                    log.warn("Unsupported INSERT expression: {}", node);
+                    connectionContext.write(PackageUtils.buildSyntaxErrPackage(
+                            connectionContext.getQueryString()));
+                    return null;
+                } catch (RuntimeException e) {
                     writeIncorrectValue(connectionContext, node.toString(), colName, i + 1, e);
                     return null;
                 }
@@ -239,18 +220,18 @@ public class SqlInsertHandler implements Handler<SqlInsert> {
                 columnNameAndValue.put(colName, v);
             }
 
-            List<Value> row = Lists.newArrayList();
+            List<Value> row = new ArrayList<>();
             for (String columnName : allColumns) {
                 Value v = columnNameAndValue.get(columnName);
                 if (Objects.isNull(v)) {
-                    DataType dataType = map.get(columnName);
-                    SlothColumn column = definitions.get(columnName);
+                    WriteColumn column = writeTable.getColumn(columnName);
+                    DataType dataType = column.getDataType();
                     try {
                         v = defaultValue(column, dataType);
                         validateColumnValue(column, v);
                     } catch (IllegalArgumentException e) {
                         writeIncorrectValue(connectionContext,
-                                column.getColumnType().getDefalutValue(), columnName, i + 1, e);
+                                column.getDefaultValue(), columnName, i + 1, e);
                         return null;
                     }
                 }
@@ -270,33 +251,80 @@ public class SqlInsertHandler implements Handler<SqlInsert> {
                 String.format(UNSUPPORTED_FEATURE.getMessage(), "INSERT ... SELECT")));
     }
 
-    private Value defaultValue(SlothColumn column, DataType dataType) {
-        String defaultValue = column.getColumnType().getDefalutValue();
+    private Value defaultValue(WriteColumn column, DataType dataType) {
+        String defaultValue = column.getDefaultValue();
         return dataType.createByType(defaultValue);
     }
 
-    private void validateColumnValue(SlothColumn column, Value value) {
-        EnhanceSlothColumn definition = column.getColumnType();
-        if (value.isNull() && !definition.isNullable()) {
+    private Value literalValue(SqlNode node, DataType dataType) {
+        if (SqlUtil.isNullLiteral(node, false)) {
+            return dataType.createByType(null);
+        }
+
+        BigDecimal number = numericLiteral(node);
+        if (number != null) {
+            switch (dataType.precedence()) {
+                case BYTE:
+                case SHORT:
+                case INTEGER:
+                case LONG:
+                    // Avoid silently truncating a fractional literal before range checks.
+                    return dataType.createByType(number.longValueExact());
+                default:
+                    return dataType.createByType(number);
+            }
+        }
+        if (node instanceof SqlCharStringLiteral) {
+            return dataType.createByType(
+                    ((SqlCharStringLiteral) node).getNlsString().getValue());
+        }
+        if (node instanceof SqlLiteral) {
+            return dataType.createByType(((SqlLiteral) node).getValue());
+        }
+        throw new UnsupportedOperationException("Unsupported INSERT expression: " + node);
+    }
+
+    private BigDecimal numericLiteral(SqlNode node) {
+        if (node instanceof SqlNumericLiteral) {
+            return (BigDecimal) ((SqlNumericLiteral) node).getValue();
+        }
+        if (!(node instanceof SqlCall)
+                || node.getKind() != SqlKind.MINUS_PREFIX
+                && node.getKind() != SqlKind.PLUS_PREFIX) {
+            return null;
+        }
+        SqlNode operand = ((SqlCall) node).operand(0);
+        if (!(operand instanceof SqlNumericLiteral)) {
+            return null;
+        }
+        BigDecimal value = (BigDecimal) ((SqlNumericLiteral) operand).getValue();
+        return node.getKind() == SqlKind.MINUS_PREFIX ? value.negate() : value;
+    }
+
+    private void validateColumnValue(WriteColumn column, Value value) {
+        if (value.isNull() && !column.isNullable()) {
             throw new IllegalArgumentException(String.format(
-                    COLUMN_CANNOT_BE_NULL.getMessage(), column.getColumnName()));
+                    COLUMN_CANNOT_BE_NULL.getMessage(), column.getName()));
         }
         if (value.isNull()) {
             return;
         }
         Object raw = value.getValueByType();
-        if (definition.isUnsigned() && raw instanceof Number
+        if (column.isUnsigned() && raw instanceof Number
                 && new BigDecimal(raw.toString()).signum() < 0) {
             throw new IllegalArgumentException("Unsigned column cannot contain a negative value");
         }
-        if (definition.getPrecision() > 0 && raw instanceof String
-                && ((String) raw).length() > definition.getPrecision()) {
-            throw new IllegalArgumentException("Value exceeds declared column precision");
+        if (column.getPrecision() > 0 && raw instanceof String) {
+            String string = (String) raw;
+            int characters = string.codePointCount(0, string.length());
+            if (characters > column.getPrecision()) {
+                throw new IllegalArgumentException("Value exceeds declared column precision");
+            }
         }
     }
 
     private void writeIncorrectValue(ConnectionContext connectionContext, String value,
-                                     String column, int row, IllegalArgumentException cause) {
+                                     String column, int row, RuntimeException cause) {
         MysqlPackage mysqlPackage;
         if (cause.getMessage() != null && cause.getMessage().contains("cannot be null")) {
             mysqlPackage = PackageUtils.buildErrPackage(
@@ -309,4 +337,5 @@ public class SqlInsertHandler implements Handler<SqlInsert> {
         }
         connectionContext.write(mysqlPackage);
     }
+
 }

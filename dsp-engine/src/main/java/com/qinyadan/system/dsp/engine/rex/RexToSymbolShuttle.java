@@ -9,7 +9,7 @@ import com.qinyadan.system.dsp.engine.data.func.Scalar;
 import com.qinyadan.system.dsp.core.data.type.DataType;
 import com.qinyadan.system.dsp.core.data.value.Value;
 import com.qinyadan.system.dsp.engine.util.FunctionMappingUtils;
-import com.qinyadan.system.dsp.core.util.TypeConversionUtils;
+import com.qinyadan.system.dsp.engine.calcite.CalciteTypeMapper;
 import org.apache.calcite.rex.*;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.NlsString;
@@ -26,7 +26,7 @@ public class RexToSymbolShuttle implements RexVisitor<Symbol> {
     @Override
     public Symbol visitInputRef(RexInputRef inputRef) {
         final SqlTypeName sqlTypeName = inputRef.getType().getSqlTypeName();
-        DataType dataType = TypeConversionUtils.getBySqlTypeName(sqlTypeName);
+        DataType dataType = CalciteTypeMapper.toDataType(sqlTypeName);
 
         return new ColumnReference(dataType, inputRef.getIndex());
     }
@@ -39,7 +39,7 @@ public class RexToSymbolShuttle implements RexVisitor<Symbol> {
     @Override
     public Symbol visitLiteral(RexLiteral literal) {
         final SqlTypeName sqlTypeName = literal.getType().getSqlTypeName();
-        DataType dataType = TypeConversionUtils.getBySqlTypeName(sqlTypeName);
+        DataType dataType = CalciteTypeMapper.toDataType(sqlTypeName);
 
         //TODO why 1.5 literal.getValue2() return 15 ?????
         Object rawValue = literal.getValue();
@@ -55,7 +55,7 @@ public class RexToSymbolShuttle implements RexVisitor<Symbol> {
     public Symbol visitCall(RexCall call) {
         final String operatorName = call.getOperator().getName();
         final SqlTypeName sqlTypeName = call.getType().getSqlTypeName();
-        DataType returnType = TypeConversionUtils.getBySqlTypeName(sqlTypeName);
+        DataType returnType = CalciteTypeMapper.toDataType(sqlTypeName);
         List<Symbol> ops = call.getOperands().stream()
                 .map(operand -> operand.accept(this))
                 .collect(Collectors.toList());

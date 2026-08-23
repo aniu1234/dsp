@@ -10,6 +10,7 @@ import com.qinyadan.system.dsp.engine.ShowEnum;
 import com.qinyadan.system.dsp.core.util.StringUtil;
 import com.qinyadan.system.dsp.engine.calcite.*;
 import com.qinyadan.system.dsp.engine.parser.ddl.SqlShow;
+import com.qinyadan.system.dsp.engine.service.CatalogService;
 import io.netty.buffer.ByteBuf;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -41,7 +42,7 @@ public class SqlShowHandler implements Handler<SqlShow> {
         final ShowEnum showType = type.getType();
         switch (showType) {
             case SHOW_DBS:
-                data = SlothSchemaHolder.INSTANCE.getAllSchemas().stream()
+                data = CatalogService.INSTANCE.listDatabases().stream()
                         .map(Lists::newArrayList)
                         .collect(Collectors.toList());
                 break;
@@ -59,8 +60,14 @@ public class SqlShowHandler implements Handler<SqlShow> {
                 columnName = new String[]{String.join(StringConstants.UNDER_LINE,
                         Lists.newArrayList("Tables", "in", db))};
 
-                final SlothSchema slothSchema = SlothSchemaHolder.INSTANCE.getSlothSchema(db);
-                data = slothSchema.getTables().stream().map(Lists::newArrayList).collect(Collectors.toList());
+                if (!CatalogService.INSTANCE.databaseExists(db)) {
+                    connectionContext.write(PackageUtils.buildErrPackage(
+                            UNKNOWN_DB_NAME.getCode(),
+                            String.format(UNKNOWN_DB_NAME.getMessage(), db)));
+                    return;
+                }
+                data = CatalogService.INSTANCE.listTables(db).stream()
+                        .map(Lists::newArrayList).collect(Collectors.toList());
 
                 break;
             case SHOW_CREATE:
@@ -115,15 +122,14 @@ public class SqlShowHandler implements Handler<SqlShow> {
             return new ShowCreateTableResult(true, null, null, mysqlPackage);
         }
 
-        final SlothSchema slothSchema = SlothSchemaHolder.INSTANCE.getSlothSchema(db);
-        if (Objects.isNull(slothSchema)) {
+        if (!CatalogService.INSTANCE.databaseExists(db)) {
             mysqlPackage = PackageUtils.buildErrPackage(
                     TABLE_NOT_EXISTS.getCode(),
                     String.format(TABLE_NOT_EXISTS.getMessage(), tableNameDatabase));
             return new ShowCreateTableResult(true, null, null, mysqlPackage);
         }
 
-        final SlothTable slothTable = (SlothTable) slothSchema.getTable(tableName);
+        final SlothTable slothTable = CatalogService.INSTANCE.getTable(db, tableName);
         if (Objects.isNull(slothTable)) {
             mysqlPackage = PackageUtils.buildErrPackage(
                     TABLE_NOT_EXISTS.getCode(),

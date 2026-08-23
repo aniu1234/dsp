@@ -4,7 +4,7 @@ import com.qinyadan.system.dsp.protocol.command.AbstractCommandHandler;
 import com.qinyadan.system.dsp.protocol.pkg.MysqlPackage;
 import com.qinyadan.system.dsp.protocol.pkg.netty.ConnectionContext;
 import com.qinyadan.system.dsp.protocol.utils.PackageUtils;
-import com.qinyadan.system.dsp.engine.calcite.SlothSchemaHolder;
+import com.qinyadan.system.dsp.engine.service.CatalogService;
 import io.netty.buffer.ByteBuf;
 
 import static com.qinyadan.system.dsp.constant.ErrorCodeAndMessageEnum.UNKNOWN_DB_NAME;
@@ -21,7 +21,7 @@ public class UseDatabaseCommandHandler extends AbstractCommandHandler {
 
     @Override
     public void execute() {
-        if (SlothSchemaHolder.INSTANCE.getAllSchemas().contains(command)) {
+        if (CatalogService.INSTANCE.databaseExists(command)) {
             connectionContext.setDb(command);
             MysqlPackage mysqlPackage = PackageUtils.buildOkMySqlPackage(0, 1, 0);
             ByteBuf byteBuf = PackageUtils.packageToBuf(mysqlPackage);

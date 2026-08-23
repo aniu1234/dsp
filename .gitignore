@@ -94,3 +94,7 @@ buildNumber.properties
 /hive-schema/hive-schema.iml
 test-schema/.DS_Store
 dsp/*
+
+# Local Python tooling caches
+__pycache__/
+*.py[cod]

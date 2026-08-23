@@ -1,27 +1,40 @@
 package com.qinyadan.system.dsp.schema.mysql;
 
+import com.qinyadan.system.dsp.schema.common.spi.ConnectorHealth;
+import com.qinyadan.system.dsp.schema.common.spi.SchemaConnector;
 import org.apache.calcite.schema.Schema;
-import org.apache.calcite.schema.SchemaFactory;
 import org.apache.calcite.schema.SchemaPlus;
-import com.qinyadan.system.dsp.schema.common.config.SchemaConfig;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.Map;
 
-import static com.qinyadan.system.dsp.schema.common.constants.CommonConstant.*;
 
+public class MysqlSchemaFactory implements SchemaConnector {
 
-public class MysqlSchemaFactory implements SchemaFactory {
+    @Override
+    public String id() {
+        return "mysql";
+    }
 
     @Override
     public Schema create(SchemaPlus parentSchema, String name, Map<String, Object> operand) {
-        String url = SchemaConfig.requireResolved(URL, "dsp.schema.mysql.url",
-                "DSP_SCHEMA_MYSQL_URL", SchemaConfig.optionalString(operand, URL, null));
-        String username = SchemaConfig.requireResolved(USER_NAME, "dsp.schema.mysql.username",
-                "DSP_SCHEMA_MYSQL_USERNAME", SchemaConfig.optionalString(operand, USER_NAME, null));
-        String password = SchemaConfig.resolve("dsp.schema.mysql.password",
-                "DSP_SCHEMA_MYSQL_PASSWORD", SchemaConfig.optionalString(operand, PASSWORD, ""));
-        String schema = SchemaConfig.requireResolved(SCHEMA, "dsp.schema.mysql.schema",
-                "DSP_SCHEMA_MYSQL_SCHEMA", SchemaConfig.optionalString(operand, SCHEMA, null));
-        return new MysqlSchema(url, username, password, schema);
+        MysqlOptions options = MysqlOptions.from(operand);
+        return new MysqlSchema(options.connectionProvider(), options.schema());
+    }
+
+    @Override
+    public ConnectorHealth health(Map<String, Object> operand) {
+        try {
+            MysqlOptions options = MysqlOptions.from(operand);
+            try (Connection connection = options.connectionProvider().open()) {
+                if (!connection.isValid(2)) {
+                    return ConnectorHealth.unavailable("MySQL connection validation failed");
+                }
+            }
+            return ConnectorHealth.ready("MySQL connector is reachable");
+        } catch (RuntimeException | SQLException e) {
+            return ConnectorHealth.unavailable("MySQL connector is unavailable", e);
+        }
     }
 }

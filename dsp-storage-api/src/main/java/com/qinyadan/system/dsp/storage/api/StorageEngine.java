@@ -13,7 +13,11 @@ public interface StorageEngine {
     Logger LOG = LoggerFactory.getLogger(StorageEngine.class);
 
     /**
-     * Append rows to this engine.
+     * Append rows to this engine as one batch.
+     *
+     * <p>Implementations must validate the complete batch before mutating storage and
+     * return the exact number of appended rows. A successful append makes rows available
+     * to scans; durability is controlled separately through {@link #flush()}.</p>
      */
     WriteResult append(Row... rows) throws IOException;
 

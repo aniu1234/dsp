@@ -19,6 +19,7 @@ public class CoreDataSemanticsTest {
         assertFalse(new Value(new BigDecimal("0.00"), DataTypes.DOUBLE).booleanValue());
         assertTrue(new Value(1, DataTypes.INTEGER).booleanValue());
         assertTrue(new Value(-1, DataTypes.INTEGER).booleanValue());
+        assertTrue(DataTypes.BOOLEAN.createByType(-1).booleanValue());
     }
 
     @Test

@@ -4,8 +4,7 @@ import com.qinyadan.system.dsp.protocol.pkg.MysqlPackage;
 import com.qinyadan.system.dsp.protocol.pkg.netty.ConnectionContext;
 import com.qinyadan.system.dsp.protocol.utils.PackageUtils;
 import com.qinyadan.system.dsp.core.util.StringUtil;
-import com.qinyadan.system.dsp.engine.calcite.SlothSchema;
-import com.qinyadan.system.dsp.engine.calcite.SlothSchemaHolder;
+import com.qinyadan.system.dsp.engine.service.CatalogService;
 import com.qinyadan.system.dsp.engine.parser.ddl.SqlDrop;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -33,9 +32,7 @@ public class SqlDropHandler implements Handler<SqlDrop> {
 
 
     private void dropDb(String dbName, ConnectionContext connectionContext) {
-        final SlothSchema slothSchema = SlothSchemaHolder.INSTANCE.getSlothSchema(dbName);
-
-        if (Objects.isNull(slothSchema)) {
+        if (!CatalogService.INSTANCE.databaseExists(dbName)) {
             final MysqlPackage error = PackageUtils.buildErrPackage(
                     DATABASE_NOT_EXIST_IN_DROP.getCode(),
                     DATABASE_NOT_EXIST_IN_DROP.getMessage());
@@ -44,7 +41,7 @@ public class SqlDropHandler implements Handler<SqlDrop> {
             return;
         }
 
-        SlothSchemaHolder.INSTANCE.removeSchema(dbName);
+        CatalogService.INSTANCE.dropDatabase(dbName);
 
         final MysqlPackage mysqlPackage =
                 PackageUtils.buildOkMySqlPackage(1, 1, 0);
@@ -66,8 +63,7 @@ public class SqlDropHandler implements Handler<SqlDrop> {
             return;
         }
 
-        final SlothSchema slothSchema = SlothSchemaHolder.INSTANCE.getSlothSchema(db);
-        if (Objects.isNull(slothSchema) || !slothSchema.containsTable(table)) {
+        if (!CatalogService.INSTANCE.tableExists(db, table)) {
             final MysqlPackage error = PackageUtils.buildErrPackage(
                     UNKNOWN_TABLE_NAME.getCode(),
                     String.format(UNKNOWN_TABLE_NAME.getMessage(), tableAndDb));
@@ -75,7 +71,7 @@ public class SqlDropHandler implements Handler<SqlDrop> {
             return;
         }
 
-        slothSchema.dropTable(table);
+        CatalogService.INSTANCE.dropTable(db, table);
         final MysqlPackage mysqlPackage =
                 PackageUtils.buildOkMySqlPackage(1, 1, 0);
 

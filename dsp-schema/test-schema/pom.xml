@@ -11,6 +11,11 @@
 
     <artifactId>test-schema</artifactId>
 
+    <properties>
+        <!-- Test assembly intentionally loads multiple connector implementations. -->
+        <schema.boundary.skip>true</schema.boundary.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>com.qinyadan.system</groupId>

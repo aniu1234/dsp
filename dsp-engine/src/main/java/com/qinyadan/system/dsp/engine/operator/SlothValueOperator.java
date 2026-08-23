@@ -4,7 +4,7 @@ import com.google.common.collect.ImmutableList;
 import com.qinyadan.system.dsp.engine.data.SlothRow;
 import com.qinyadan.system.dsp.core.data.type.DataType;
 import com.qinyadan.system.dsp.core.data.value.Value;
-import com.qinyadan.system.dsp.core.util.TypeConversionUtils;
+import com.qinyadan.system.dsp.engine.calcite.CalciteTypeMapper;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -34,7 +34,7 @@ public class SlothValueOperator extends AbstractOperator<SlothRow> {
                             List<Value> dataValues = l.stream()
                                     .map(r -> {
                                         final SqlTypeName sqlTypeName = r.getType().getSqlTypeName();
-                                        DataType dataType = TypeConversionUtils.getBySqlTypeName(sqlTypeName);
+                                        DataType dataType = CalciteTypeMapper.toDataType(sqlTypeName);
                                         Object rawValue = r.getValue();
                                         if (rawValue instanceof NlsString) {
                                             rawValue = ((NlsString) rawValue).getValue();

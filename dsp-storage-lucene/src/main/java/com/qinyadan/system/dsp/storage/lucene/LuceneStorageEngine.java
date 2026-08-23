@@ -92,6 +92,9 @@ public class LuceneStorageEngine implements StorageEngine {
 
         List<Document> documents = new ArrayList<>(rows.length);
         for (Row row : rows) {
+            if (row == null) {
+                throw new IllegalArgumentException("Rows to append must not contain null");
+            }
             documents.add(mapper.toDocument(row));
         }
         indexWriter.addDocuments(documents);

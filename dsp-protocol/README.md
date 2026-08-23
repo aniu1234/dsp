@@ -9,10 +9,8 @@
 - 简单实现了RBO与CBO
 - 实现了物理执行计划Operator(MPP)
 
-项目地址: [待定](https://www.baidu.com),
-欢迎小伙伴们一起参加
-
-目前仍在进行分布式能力、存储优化与列类型扩展。
+当前版本是开发者预览，完整产品能力、限制和路线图见
+[产品说明](../docs/product.md)。目前仍在进行服务边界、存储优化与列类型扩展。
 
 ### 2.如何启动该数据库
 
@@ -64,6 +62,8 @@ export DSP_QUERY_MAX_MATERIALIZED_ROWS='100000'
 export DSP_STORAGE_SCAN_PAGE_SIZE='512'
 # 默认 true；返回 INSERT 成功前提交到 Lucene
 export DSP_STORAGE_SYNC_WRITES='true'
+# 单条 INSERT 最大行数
+export DSP_WRITE_MAX_ROWS_PER_INSERT='10000'
 ```
 
 在IDE中找到`FrontEndMain`, 直接启动main函数即可

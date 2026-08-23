@@ -1,7 +1,7 @@
 package com.qinyadan.system.dsp.engine.operator;
 
 import com.qinyadan.system.dsp.core.data.type.DataType;
-import com.qinyadan.system.dsp.core.util.TypeConversionUtils;
+import com.qinyadan.system.dsp.engine.calcite.CalciteTypeMapper;
 import org.apache.calcite.rel.type.RelDataType;
 
 import java.util.List;
@@ -20,7 +20,7 @@ public abstract class AbstractOperator<R> implements Operator<R> {
     public List<DataType> getRowType() {
         return rowTypes.getFieldList().stream()
                 .map(f -> f.getType().getSqlTypeName())
-                .map(TypeConversionUtils::getBySqlTypeName)
+                .map(CalciteTypeMapper::toDataType)
                 .collect(Collectors.toList());
     }
 }

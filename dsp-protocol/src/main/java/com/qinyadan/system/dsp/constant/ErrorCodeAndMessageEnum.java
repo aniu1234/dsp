@@ -95,6 +95,11 @@ public enum ErrorCodeAndMessageEnum {
     QUERY_RESOURCE_LIMIT(1226, "Query resource limit exceeded: %s"),
 
     /**
+     * A single write statement exceeded its configured row limit.
+     */
+    WRITE_RESOURCE_LIMIT(1226, "Write resource limit exceeded: %s"),
+
+    /**
      * Query exceeded its configured execution deadline.
      */
     QUERY_TIMEOUT(3024, "Query execution was interrupted after exceeding %s ms"),

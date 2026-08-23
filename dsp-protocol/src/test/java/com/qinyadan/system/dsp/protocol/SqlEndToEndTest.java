@@ -1,7 +1,7 @@
 package com.qinyadan.system.dsp.protocol;
 
-import com.qinyadan.system.dsp.engine.calcite.EnvironmentValueHolder;
-import com.qinyadan.system.dsp.engine.calcite.SlothSchemaHolder;
+import com.qinyadan.system.dsp.engine.service.CatalogService;
+import com.qinyadan.system.dsp.engine.service.EnvironmentService;
 import com.qinyadan.system.dsp.protocol.command.inter.QueryCommandHandler;
 import com.qinyadan.system.dsp.protocol.pkg.netty.ConnectionContext;
 import io.netty.buffer.ByteBuf;
@@ -34,8 +34,8 @@ public class SqlEndToEndTest {
     public static void setUp() throws Exception {
         dataDirectory = Files.createTempDirectory("dsp-sql-e2e");
         System.setProperty("dsp.data.dir", dataDirectory.toString());
-        EnvironmentValueHolder.INSTACNE.init();
-        SlothSchemaHolder.INSTANCE.init();
+        EnvironmentService.INSTANCE.init();
+        CatalogService.INSTANCE.init();
 
         ContextCapture capture = new ContextCapture();
         channel = new EmbeddedChannel(capture);
@@ -44,10 +44,11 @@ public class SqlEndToEndTest {
 
     @AfterClass
     public static void tearDown() throws Exception {
-        if (SlothSchemaHolder.INSTANCE.contains("p0_test")) {
+        if (CatalogService.INSTANCE.databaseExists("p0_test")) {
             execute("DROP DATABASE p0_test");
         }
-        SlothSchemaHolder.INSTANCE.close();
+        CatalogService.INSTANCE.close();
+        EnvironmentService.INSTANCE.close();
         channel.finishAndReleaseAll();
         System.clearProperty("dsp.data.dir");
         FileUtils.deleteDirectory(dataDirectory.toFile());
@@ -67,6 +68,8 @@ public class SqlEndToEndTest {
                 + "ENGINE = lucene"));
         assertOk(execute("CREATE TABLE agg_values (group_name VARCHAR, amount INTEGER) "
                 + "ENGINE = lucene"));
+        assertOk(execute("CREATE TABLE write_rules (id INTEGER UNSIGNED NOT NULL, "
+                + "code VARCHAR(3) NOT NULL) ENGINE = lucene"));
 
         assertOk(execute("INSERT INTO users(id) VALUES (1)"));
         assertOk(execute("INSERT INTO users(id, name) VALUES (2, 'member'), (3, NULL)"));
@@ -80,7 +83,6 @@ public class SqlEndToEndTest {
                 + "(1, 1, 'r11'), (1, 1, 'r11b'), (1, 3, 'r13'), (NULL, 2, 'rn')"));
         assertOk(execute("INSERT INTO agg_values(group_name, amount) VALUES "
                 + "('a', 1), ('a', 2), ('a', NULL), ('b', 5), (NULL, 7)"));
-
         assertEquals(Arrays.asList(Arrays.asList("1", "guest")),
                 resultRows(execute("SELECT id, name FROM users WHERE id = 1"), 2));
         String previousMaterializedLimit =
@@ -148,8 +150,48 @@ public class SqlEndToEndTest {
                         + "MIN(amount), MAX(amount) FROM agg_values GROUP BY group_name "
                         + "ORDER BY group_name"), 5));
 
+        byte[] signedInsert = execute(
+                "INSERT INTO users(`ID`, `NAME`) VALUES (-5, DEFAULT), (+6, 'signed')");
+        assertOk(signedInsert);
+        assertEquals(2, affectedRows(signedInsert));
+        assertEquals(Arrays.asList(
+                        Arrays.asList("-5", "guest"),
+                        Arrays.asList("1", "guest"),
+                        Arrays.asList("2", "member"),
+                        Arrays.asList("3", null),
+                        Arrays.asList("4", "中文"),
+                        Arrays.asList("6", "signed")),
+                resultRows(execute("SELECT id, name FROM users ORDER BY id"), 2));
+
         byte[] notNullError = execute("INSERT INTO users(id, name) VALUES (NULL, 'bad')");
         assertEquals(1048, errorCode(notNullError));
+        assertEquals(1366, errorCode(execute(
+                "INSERT INTO write_rules(id, code) VALUES (-1, 'ok')")));
+        assertEquals(1366, errorCode(execute(
+                "INSERT INTO write_rules(id, code) VALUES (1.5, 'ok')")));
+        assertEquals(1366, errorCode(execute(
+                "INSERT INTO write_rules(id, code) VALUES (1, 'long')")));
+
+        // The complete VALUES list is validated before the storage batch starts.
+        assertEquals(1048, errorCode(execute(
+                "INSERT INTO teams(id, label) VALUES (3, 'valid'), (4, NULL)")));
+        assertEquals(new ArrayList<List<String>>(),
+                resultRows(execute("SELECT id FROM teams WHERE id = 3"), 1));
+        assertEquals(new ArrayList<List<String>>(),
+                resultRows(execute("SELECT id FROM teams WHERE id = 4"), 1));
+
+        String previousWriteLimit = System.getProperty("dsp.write.max-rows-per-insert");
+        System.setProperty("dsp.write.max-rows-per-insert", "1");
+        try {
+            assertEquals(1226, errorCode(execute(
+                    "INSERT INTO users(id) VALUES (7), (8)")));
+            assertEquals(new ArrayList<List<String>>(),
+                    resultRows(execute("SELECT id FROM users WHERE id = 7"), 1));
+            assertEquals(new ArrayList<List<String>>(),
+                    resultRows(execute("SELECT id FROM users WHERE id = 8"), 1));
+        } finally {
+            restoreProperty("dsp.write.max-rows-per-insert", previousWriteLimit);
+        }
         assertEquals(1235, errorCode(execute("BEGIN")));
         assertEquals(1235, errorCode(execute("SELECT @@not_a_dsp_variable")));
     }
@@ -189,6 +231,17 @@ public class SqlEndToEndTest {
         byte[] payload = payloads(response).get(0);
         assertEquals(0xff, payload[0] & 0xff);
         return (payload[1] & 0xff) | ((payload[2] & 0xff) << 8);
+    }
+
+    private static int affectedRows(byte[] response) {
+        byte[] payload = payloads(response).get(0);
+        assertEquals(0, payload[0] & 0xff);
+        int encoded = payload[1] & 0xff;
+        if (encoded > 0xfa) {
+            throw new IllegalArgumentException(
+                    "Test helper only supports small affected-row counts");
+        }
+        return encoded;
     }
 
     private static List<List<String>> resultRows(byte[] response, int columnCount) {

@@ -3,7 +3,7 @@ package com.qinyadan.system.dsp.protocol.command.sqlnode;
 import com.qinyadan.system.dsp.protocol.pkg.MysqlPackage;
 import com.qinyadan.system.dsp.protocol.pkg.netty.ConnectionContext;
 import com.qinyadan.system.dsp.protocol.utils.PackageUtils;
-import com.qinyadan.system.dsp.engine.calcite.SlothSchemaHolder;
+import com.qinyadan.system.dsp.engine.service.CatalogService;
 import com.qinyadan.system.dsp.engine.parser.ddl.SqlCreateDb;
 
 import static com.qinyadan.system.dsp.constant.ErrorCodeAndMessageEnum.DATABASE_EXISTS_ERROR;
@@ -18,7 +18,7 @@ public class SqlCreateDbHandler implements Handler<SqlCreateDb> {
         final String db = type.getDbName();
 
         //db already exists
-        if (SlothSchemaHolder.INSTANCE.contains(db)) {
+        if (CatalogService.INSTANCE.databaseExists(db)) {
             MysqlPackage mysqlPackage = PackageUtils.buildErrPackage(
                     DATABASE_EXISTS_ERROR.getCode(),
                     String.format(DATABASE_EXISTS_ERROR.getMessage(), db));
@@ -27,7 +27,7 @@ public class SqlCreateDbHandler implements Handler<SqlCreateDb> {
             return;
         }
 
-        SlothSchemaHolder.INSTANCE.registerSchema(db);
+        CatalogService.INSTANCE.createDatabase(db);
         final MysqlPackage mysqlPackage = PackageUtils.buildOkMySqlPackage(1, 1, 0);
         connectionContext.write(mysqlPackage);
     }

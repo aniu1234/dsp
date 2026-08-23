@@ -1,8 +1,11 @@
-## DSP Specification
+# DSP
 
-```text
-该项目设计是为了学习和体验实现中间件的开发过程。
-```
+DSP 是一个 Java 模块化 SQL 数据服务原型，通过 MySQL Wire Protocol 提供访问入口，
+使用 Apache Calcite 完成 SQL 解析与规划，并通过存储 SPI 使用 Lucene 持久化数据。
+
+当前版本定位为 Developer Preview，适合数据库中间件学习、架构验证和本地实验，
+不应直接用于生产核心业务。产品能力、限制和路线图见
+[产品说明](docs/product.md)，代码边界见[架构说明](docs/architecture.md)。
 
 ## 模块结构
 
@@ -25,16 +28,18 @@ dsp (parent)
 
 ## 依赖关系
 
+箭头表示左侧依赖右侧：
+
 ```
-dsp-core ────────────────> dsp-engine ───────────────> dsp-protocol
-   └─> dsp-storage-api ───> dsp-engine
-          └─> dsp-storage-lucene ──(runtime / SPI)──> dsp-protocol
+dsp-protocol ─────> dsp-engine ─────> dsp-core
+      │                  └──────────> dsp-storage-api ──> dsp-core
+      └─(runtime)─> dsp-storage-lucene ──> dsp-storage-api
 ```
 
-- **dsp-core**：无内部模块依赖，仅依赖 Guava、Lombok、Calcite 等基础库
+- **dsp-core**：框架无关的数据模型，不依赖 Calcite
 - **dsp-storage-api**：依赖 dsp-core，定义存储引擎接口
 - **dsp-storage-lucene**：实现公共存储接口，由 ServiceLoader 注册引擎工厂
-- **dsp-engine**：只依赖存储 API，负责 SQL 执行，并在边界适配核心 Row/Value
+- **dsp-engine**：负责 SQL 解析、规划、执行与应用服务，并在边界适配 Calcite 类型
 - **dsp-protocol**：应用装配层，运行时加载 Lucene 插件并提供 MySQL 协议入口
 
 更完整的模块职责、依赖规则和后续拆分方向见 [架构边界说明](docs/architecture.md)。
@@ -45,6 +50,22 @@ dsp-core ────────────────> dsp-engine ───�
 mvn test
 ```
 
+## 快速体验
+
+```bash
+export DSP_AUTH_USERNAME='root'
+export DSP_AUTH_PASSWORD='change-me'
+export DSP_DATA_DIR="$HOME/.dsp/data"
+```
+
+在 IDE 中运行 `com.qinyadan.system.dsp.FrontEndMain`，然后连接：
+
+```bash
+mysql -h127.0.0.1 -P3016 -uroot -p --ssl-mode=disabled
+```
+
+详细启动、元数据和资源限制配置见 [dsp-protocol/README.md](dsp-protocol/README.md)。
+
 ## 重构进度
 
 - [x] Phase 1: 创建 dsp-core（数据模型层）
@@ -53,3 +74,6 @@ mvn test
 - [x] Phase 4: dsp-engine 主链路切换到公共存储 API
 - [x] Phase 5: 更新 protocol 依赖并清理旧存储实现
 - [x] Phase 6: 收敛 dsp-core 与 dsp-engine 中重复的 DataType/Value
+- [x] Phase 7: 移除 dsp-core 的 Calcite 依赖并增加构建边界
+- [x] Phase 8: 增加 Query/Catalog/Environment/Write 服务门面
+- [ ] Phase 9: 服务 DTO 化、事务契约与可观测性

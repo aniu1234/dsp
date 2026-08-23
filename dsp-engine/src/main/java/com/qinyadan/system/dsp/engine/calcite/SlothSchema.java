@@ -65,6 +65,10 @@ public class SlothSchema extends AbstractSchema {
         if (tables.containsKey(tableName)) {
             throw new IllegalStateException("Table already exists: " + schemaName + "." + tableName);
         }
+        // The catalog owns the table-storage lifecycle. Callers only submit a
+        // table definition; opening storage and persisting/registering that
+        // definition happen within this boundary.
+        slothTable.initTableEngine();
         try {
             TableMeta.INSTANCE.addTable(schemaName, slothTable);
             tables.put(tableName, slothTable);

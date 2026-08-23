@@ -24,10 +24,17 @@ public class MysqlSchema extends AbstractSchema {
     private volatile Map<String, Table> tableMap;
 
     public MysqlSchema(String url, String username, String password, String schema) {
+        this(new MysqlConnectionProvider(url, username, password), schema);
+    }
+
+    MysqlSchema(MysqlConnectionProvider connectionProvider, String schema) {
+        if (connectionProvider == null) {
+            throw new IllegalArgumentException("MySQL connection provider must not be null");
+        }
         if (schema == null || schema.trim().isEmpty()) {
             throw new IllegalArgumentException("MySQL schema must not be empty");
         }
-        connectionProvider = new MysqlConnectionProvider(url, username, password);
+        this.connectionProvider = connectionProvider;
         this.schema = schema.trim();
     }
 

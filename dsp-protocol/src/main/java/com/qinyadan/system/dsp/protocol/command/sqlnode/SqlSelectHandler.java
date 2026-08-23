@@ -12,9 +12,8 @@ import com.qinyadan.system.dsp.engine.data.SlothRow;
 import com.qinyadan.system.dsp.core.data.value.Value;
 import com.qinyadan.system.dsp.engine.operator.Operator;
 import com.qinyadan.system.dsp.engine.operator.QueryResourceLimitException;
-import com.qinyadan.system.dsp.engine.calcite.ParserFactory;
-import com.qinyadan.system.dsp.engine.calcite.SlothParser;
 import com.qinyadan.system.dsp.engine.rel.SlothRel;
+import com.qinyadan.system.dsp.engine.service.QueryService;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.commons.lang3.StringUtils;
@@ -43,10 +42,9 @@ public class SqlSelectHandler implements Handler<SqlNode> {
             return;
         }
 
-        SlothParser slothParser = ParserFactory.getParser(connectionContext.getQueryString(),
-                connectionContext.getDb());
         type = type.accept(new EnvironmentReplaceVisitor(connectionContext));
-        final RelNode relNode = slothParser.getPlan(type);
+        final RelNode relNode = QueryService.INSTANCE.plan(
+                connectionContext.getQueryString(), connectionContext.getDb(), type);
 
         final Operator<SlothRow> operator = ((SlothRel) relNode).implement();
 

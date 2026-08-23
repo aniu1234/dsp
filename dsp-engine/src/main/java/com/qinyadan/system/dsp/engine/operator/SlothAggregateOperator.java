@@ -134,8 +134,8 @@ public class SlothAggregateOperator extends AbstractOperator<SlothRow> {
             }
             int index = arguments.isEmpty() ? -1 : arguments.get(0);
             DataType inputType = index < 0 ? null : input.getRowType().get(index);
-            DataType resultType = com.qinyadan.system.dsp.core.util.TypeConversionUtils
-                    .getBySqlTypeName(call.type.getSqlTypeName());
+            DataType resultType = com.qinyadan.system.dsp.engine.calcite.CalciteTypeMapper
+                    .toDataType(call.type.getSqlTypeName());
             SqlAggFunction function = call.getAggregation();
             if (function == SqlStdOperatorTable.COUNT) {
                 if (call.isDistinct() && arguments.isEmpty()) {

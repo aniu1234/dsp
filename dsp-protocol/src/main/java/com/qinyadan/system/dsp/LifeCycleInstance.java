@@ -3,8 +3,8 @@ package com.qinyadan.system.dsp;
 import com.google.common.collect.Lists;
 import com.qinyadan.system.dsp.engine.LifeCycle;
 import com.qinyadan.system.dsp.engine.StorageService;
-import com.qinyadan.system.dsp.engine.calcite.SlothSchemaHolder;
-import com.qinyadan.system.dsp.engine.calcite.EnvironmentValueHolder;
+import com.qinyadan.system.dsp.engine.service.CatalogService;
+import com.qinyadan.system.dsp.engine.service.EnvironmentService;
 
 import java.util.List;
 import java.util.ListIterator;
@@ -15,8 +15,8 @@ public enum LifeCycleInstance {
     ;
 
     private static final List<LifeCycle> lifeCycles = Lists.newArrayList(
-            SlothSchemaHolder.INSTANCE,
-            EnvironmentValueHolder.INSTACNE,
+            CatalogService.INSTANCE,
+            EnvironmentService.INSTANCE,
             StorageService.INSTANCE
     );
 

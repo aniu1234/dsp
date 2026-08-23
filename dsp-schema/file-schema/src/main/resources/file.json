@@ -5,16 +5,18 @@
     {
       "name": "csv",
       "type": "custom",
-      "factory": "com.qinyadan.system.dsp.schema.file.csv.CsvFileSchemaFactory",
+      "factory": "com.qinyadan.system.dsp.schema.common.spi.RegistrySchemaFactory",
       "operand": {
+        "connector": "file-csv",
         "directory": "csv"
       }
     },
     {
       "name": "json",
       "type": "custom",
-      "factory": "com.qinyadan.system.dsp.schema.file.json.JsonFileSchemaFactory",
+      "factory": "com.qinyadan.system.dsp.schema.common.spi.RegistrySchemaFactory",
       "operand": {
+        "connector": "file-json",
         "directory": "json"
       }
     }

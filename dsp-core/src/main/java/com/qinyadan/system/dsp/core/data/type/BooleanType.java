@@ -5,6 +5,7 @@ import com.google.common.collect.Maps;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.math.BigDecimal;
 import java.util.Locale;
 import java.util.Map;
 
@@ -67,10 +68,7 @@ public class BooleanType extends DataType<Boolean> implements FixedWidthType {
     }
 
     private Boolean booleanFromNumber(Number value) {
-        if (value.doubleValue() > 0.0) {
-            return Boolean.TRUE;
-        }
-        return Boolean.FALSE;
+        return BigDecimal.ZERO.compareTo(new BigDecimal(value.toString())) != 0;
     }
 
 

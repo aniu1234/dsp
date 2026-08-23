@@ -1,6 +1,5 @@
 package com.qinyadan.system.dsp.engine.calcite;
 
-import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.qinyadan.system.dsp.core.data.Row;
@@ -9,7 +8,6 @@ import com.qinyadan.system.dsp.core.data.type.DataType;
 import com.qinyadan.system.dsp.core.data.value.Value;
 import com.qinyadan.system.dsp.engine.LifeCycle;
 import com.qinyadan.system.dsp.engine.data.SlothRow;
-import com.qinyadan.system.dsp.core.util.TypeConversionUtils;
 import com.qinyadan.system.dsp.storage.api.EngineConfig;
 import com.qinyadan.system.dsp.storage.api.EngineRegistry;
 import com.qinyadan.system.dsp.storage.api.StorageEngine;
@@ -31,7 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
 
 
 /**
@@ -66,6 +64,12 @@ public class SlothTableEngine implements LifeCycle {
     @Getter
     private List<StorageEngine> storageEngines;
 
+    /**
+     * Route complete INSERT statements in round-robin order. Keeping all rows from one
+     * statement on one shard preserves the storage engine's atomic batch append boundary.
+     */
+    private final AtomicInteger nextWriteShard = new AtomicInteger();
+
 
     public SlothTableEngine(SlothTable slothTable) {
         this.slothTable = slothTable;
@@ -76,15 +80,30 @@ public class SlothTableEngine implements LifeCycle {
     /**
      * @param values
      */
-    public void insert(List<List<Value>> values) {
-        int shard = ThreadLocalRandom.current().nextInt(slothTable.getShardNum());
-        final StorageEngine storageEngine = storageEngines.get(shard);
+    public WriteResult insert(List<List<Value>> values) {
+        if (values == null) {
+            throw new IllegalArgumentException("Values to insert must not be null");
+        }
+        if (values.isEmpty()) {
+            return new WriteResult(0, System.currentTimeMillis());
+        }
 
+        // Convert and validate the full batch before touching storage. A malformed row
+        // must not make a healthy shard read-only or leave an earlier row persisted.
+        Row[] rows = values.stream()
+                .map(this::toStorageRow)
+                .toArray(Row[]::new);
+        if (storageEngines == null || storageEngines.isEmpty()) {
+            throw new IllegalStateException("No storage engine is available for table "
+                    + slothTable.getTableName());
+        }
+        int shard = Math.floorMod(nextWriteShard.getAndIncrement(), storageEngines.size());
+        final StorageEngine storageEngine = storageEngines.get(shard);
         try {
-            Row[] rows = values.stream()
-                    .map(this::toStorageRow)
-                    .toArray(Row[]::new);
             WriteResult result = storageEngine.append(rows);
+            if (result == null) {
+                throw new IllegalStateException("Storage engine returned no write result");
+            }
             if (result.getInserted() != rows.length) {
                 throw new IllegalStateException("Storage engine inserted " + result.getInserted()
                         + " of " + rows.length + " rows");
@@ -92,10 +111,11 @@ public class SlothTableEngine implements LifeCycle {
             if (synchronousWrites()) {
                 storageEngine.flush();
             }
+            return result;
         } catch (IOException e) {
-            log.error(Throwables.getStackTraceAsString(e));
             storageEngine.setReadOnly(true);
-            throw new RuntimeException(e);
+            throw new IllegalStateException("Unable to write table "
+                    + slothTable.getTableName() + " shard " + shard, e);
         } catch (RuntimeException e) {
             storageEngine.setReadOnly(true);
             throw e;
@@ -249,7 +269,7 @@ public class SlothTableEngine implements LifeCycle {
         slothTable.getColumns().forEach(column -> {
             final SqlTypeName sqlTypeName = column.getColumnType().getColumnType();
             columnAndDataType.put(column.getColumnName(),
-                    TypeConversionUtils.getBySqlTypeName(sqlTypeName));
+                    CalciteTypeMapper.toDataType(sqlTypeName));
             columnNames.add(column.getColumnName());
         });
     }

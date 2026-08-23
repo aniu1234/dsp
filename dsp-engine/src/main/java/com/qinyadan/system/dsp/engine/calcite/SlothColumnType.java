@@ -1,6 +1,8 @@
 package com.qinyadan.system.dsp.engine.calcite;
 
+import com.qinyadan.system.dsp.engine.service.dto.CreateColumnDefinition;
 import org.apache.calcite.sql.SqlDataTypeSpec;
+import org.apache.calcite.sql.SqlBasicTypeNameSpec;
 import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
@@ -84,9 +86,21 @@ public class SlothColumnType extends SqlDataTypeSpec {
         enhanceSlothColumn.setNullable(getNullable());
         if (Objects.nonNull(precision)) {
             enhanceSlothColumn.setPrecision(Integer.parseInt(precision.toString()));
+        } else if (getTypeNameSpec() instanceof SqlBasicTypeNameSpec) {
+            int typePrecision = ((SqlBasicTypeNameSpec) getTypeNameSpec()).getPrecision();
+            if (typePrecision > 0) {
+                enhanceSlothColumn.setPrecision(typePrecision);
+            }
         }
 
         return enhanceSlothColumn;
+    }
+
+    public CreateColumnDefinition toColumnDefinition(String columnName) {
+        EnhanceSlothColumn column = toEnhance(columnName);
+        return new CreateColumnDefinition(columnName, column.getColumnType().getName(),
+                column.isUnsigned(), column.isNullable(), column.getDefalutValue(),
+                column.getColumnComment(), column.getPrecision());
     }
 
     private String literalValue(SqlNode node) {

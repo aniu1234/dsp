@@ -147,6 +147,33 @@ public class LuceneStorageEngineTest {
         }
     }
 
+    @Test
+    public void invalidBatchDoesNotAppendItsValidPrefix() throws Exception {
+        File index = temporaryFolder.newFolder("atomic-batch-index");
+        List<ColumnInfo> columns = columns();
+        StorageEngine engine = EngineRegistry.create("lucene",
+                new EngineConfig(index.getAbsolutePath(), columns,
+                        Collections.<String, Object>emptyMap()));
+        Row valid = RowImpl.of(
+                new Value(1, DataTypes.INTEGER),
+                new Value("valid", DataTypes.STRING),
+                new Value(true, DataTypes.BOOLEAN));
+        try {
+            try {
+                engine.append(valid, null);
+            } catch (IllegalArgumentException expected) {
+                assertTrue(expected.getMessage().contains("must not contain null"));
+            }
+
+            assertEquals(0L, engine.estimateRowCount());
+            assertFalse(engine.readOnly());
+            assertEquals(1, engine.append(valid).getInserted());
+            assertEquals(1L, engine.estimateRowCount());
+        } finally {
+            engine.close();
+        }
+    }
+
     private static List<Row> scanAll(StorageEngine engine, List<ColumnInfo> columns)
             throws Exception {
         Set<String> names = new java.util.LinkedHashSet<>();

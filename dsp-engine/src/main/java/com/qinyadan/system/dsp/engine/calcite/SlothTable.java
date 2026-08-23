@@ -89,7 +89,7 @@ public class SlothTable extends AbstractQueryableTable {
     }
 
 
-    public void initTableEngine() {
+    void initTableEngine() {
         slothTableEngine = new SlothTableEngine(this);
     }
 

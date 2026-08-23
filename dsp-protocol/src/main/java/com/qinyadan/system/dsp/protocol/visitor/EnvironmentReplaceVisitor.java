@@ -2,7 +2,7 @@ package com.qinyadan.system.dsp.protocol.visitor;
 
 import com.google.common.collect.Lists;
 import com.qinyadan.system.dsp.protocol.pkg.netty.ConnectionContext;
-import com.qinyadan.system.dsp.engine.calcite.EnvironmentValueHolder;
+import com.qinyadan.system.dsp.engine.service.EnvironmentService;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
@@ -42,7 +42,7 @@ public class EnvironmentReplaceVisitor extends SqlShuttle {
 
             String value = connectionContext.getProperties().get(key);
             if (Objects.isNull(value)) {
-                value = EnvironmentValueHolder.INSTACNE.propertyValue(key);
+                value = EnvironmentService.INSTANCE.getGlobal(key);
                 if (Objects.isNull(value)) {
                     throw new UnsupportedOperationException("Can't suppport environment value '" + key + "'");
                 }

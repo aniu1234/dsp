@@ -15,6 +15,7 @@
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <schema.boundary.skip>false</schema.boundary.skip>
     </properties>
 
     <modules>
@@ -24,5 +25,44 @@
         <module>mysql-schema</module>
         <module>test-schema</module>
     </modules>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>${maven-enforcer.version}</version>
+                <executions>
+                    <execution>
+                        <id>enforce-schema-boundaries</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${schema.boundary.skip}</skip>
+                            <rules>
+                                <bannedDependencies>
+                                    <searchTransitive>false</searchTransitive>
+                                    <excludes>
+                                        <exclude>com.qinyadan.system:file-schema</exclude>
+                                        <exclude>com.qinyadan.system:mysql-schema</exclude>
+                                        <exclude>com.qinyadan.system:hive-schema</exclude>
+                                        <exclude>com.qinyadan.system:dsp-core</exclude>
+                                        <exclude>com.qinyadan.system:dsp-engine</exclude>
+                                        <exclude>com.qinyadan.system:dsp-protocol</exclude>
+                                        <exclude>com.qinyadan.system:dsp-raft</exclude>
+                                        <exclude>com.qinyadan.system:dsp-register</exclude>
+                                        <exclude>com.qinyadan.system:dsp-storage-api</exclude>
+                                        <exclude>com.qinyadan.system:dsp-storage-lucene</exclude>
+                                    </excludes>
+                                    <message>Schema connectors may depend only on common-schema and external APIs; connector implementations and the main runtime must remain isolated.</message>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>

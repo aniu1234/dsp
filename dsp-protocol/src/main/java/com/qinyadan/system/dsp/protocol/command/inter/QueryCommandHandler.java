@@ -7,9 +7,8 @@ import com.qinyadan.system.dsp.protocol.command.sqlnode.HandlerHolder;
 import com.qinyadan.system.dsp.protocol.pkg.MysqlPackage;
 import com.qinyadan.system.dsp.protocol.pkg.netty.ConnectionContext;
 import com.qinyadan.system.dsp.protocol.utils.PackageUtils;
-import com.qinyadan.system.dsp.engine.calcite.EnvironmentValueHolder;
-import com.qinyadan.system.dsp.engine.calcite.ParserFactory;
-import com.qinyadan.system.dsp.engine.calcite.SlothParser;
+import com.qinyadan.system.dsp.engine.service.EnvironmentService;
+import com.qinyadan.system.dsp.engine.service.QueryService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.calcite.sql.SqlNode;
 
@@ -45,9 +44,6 @@ public class QueryCommandHandler extends AbstractCommandHandler {
             if (handleCompatibilityCommand()) {
                 return;
             }
-            final SlothParser slothParser = ParserFactory.getParser(
-                    replaceEnvironmentReferences(query), connectionContext.getDb());
-
             //first use raw, for example 'explain'
             Handler handler = getRawHandler(query);
             if (Objects.nonNull(handler)) {
@@ -56,7 +52,8 @@ public class QueryCommandHandler extends AbstractCommandHandler {
             }
 
             //then parser and use sqlnode
-            sqlNode = slothParser.getSqlNode();
+            sqlNode = QueryService.INSTANCE.parse(
+                    replaceEnvironmentReferences(query), connectionContext.getDb());
             handleSqlNode(sqlNode);
         } catch (UnsupportedOperationException e) {
             log.warn("Unsupported SQL compatibility feature in '{}': {}", query, e.getMessage());
@@ -184,7 +181,7 @@ public class QueryCommandHandler extends AbstractCommandHandler {
         String key = variable.toLowerCase(Locale.ROOT);
         String value = connectionContext.getProperties().get(key);
         if (value == null) {
-            value = EnvironmentValueHolder.INSTACNE.propertyValue(key);
+            value = EnvironmentService.INSTANCE.getGlobal(key);
         }
         if (value == null) {
             throw new UnsupportedOperationException("environment variable '@@" + key + "'");

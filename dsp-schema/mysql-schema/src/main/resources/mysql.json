@@ -5,8 +5,9 @@
     {
       "name": "test",
       "type": "custom",
-      "factory": "com.qinyadan.system.dsp.schema.mysql.MysqlSchemaFactory",
+      "factory": "com.qinyadan.system.dsp.schema.common.spi.RegistrySchemaFactory",
       "operand": {
+        "connector": "mysql",
         "url": "jdbc:mysql://127.0.0.1/test",
         "username": "root",
         "password": "",

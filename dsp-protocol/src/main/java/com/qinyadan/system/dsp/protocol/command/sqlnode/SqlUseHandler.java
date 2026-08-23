@@ -3,11 +3,8 @@ package com.qinyadan.system.dsp.protocol.command.sqlnode;
 import com.qinyadan.system.dsp.protocol.pkg.MysqlPackage;
 import com.qinyadan.system.dsp.protocol.pkg.netty.ConnectionContext;
 import com.qinyadan.system.dsp.protocol.utils.PackageUtils;
-import com.qinyadan.system.dsp.engine.calcite.SlothSchema;
-import com.qinyadan.system.dsp.engine.calcite.SlothSchemaHolder;
+import com.qinyadan.system.dsp.engine.service.CatalogService;
 import com.qinyadan.system.dsp.engine.parser.ddl.SqlUse;
-
-import java.util.Objects;
 
 import static com.qinyadan.system.dsp.constant.ErrorCodeAndMessageEnum.UNKNOWN_DB_NAME;
 
@@ -25,8 +22,7 @@ public class SqlUseHandler implements Handler<SqlUse> {
 
     public MysqlPackage useDb(ConnectionContext connectionContext, String db) {
         //check if schema contains db name;
-        final SlothSchema slothSchema = SlothSchemaHolder.INSTANCE.getSlothSchema(db);
-        if (Objects.isNull(slothSchema)) {
+        if (!CatalogService.INSTANCE.databaseExists(db)) {
             return PackageUtils.buildErrPackage(
                     UNKNOWN_DB_NAME.getCode(),
                     String.format(UNKNOWN_DB_NAME.getMessage(), db));

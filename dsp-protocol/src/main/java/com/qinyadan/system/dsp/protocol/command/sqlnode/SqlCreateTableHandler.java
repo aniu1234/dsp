@@ -6,8 +6,12 @@ import com.qinyadan.system.dsp.protocol.pkg.netty.ConnectionContext;
 import com.qinyadan.system.dsp.protocol.result.ErrorMessage;
 import com.qinyadan.system.dsp.protocol.utils.PackageUtils;
 import com.qinyadan.system.dsp.core.util.StringUtil;
-import com.qinyadan.system.dsp.engine.calcite.*;
+import com.qinyadan.system.dsp.engine.calcite.SlothColumnType;
+import com.qinyadan.system.dsp.engine.calcite.SlothTable;
 import com.qinyadan.system.dsp.engine.parser.ddl.SqlCreateTable;
+import com.qinyadan.system.dsp.engine.service.CatalogService;
+import com.qinyadan.system.dsp.engine.service.dto.CreateColumnDefinition;
+import com.qinyadan.system.dsp.engine.service.dto.CreateTableDefinition;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.commons.lang3.tuple.Pair;
@@ -56,14 +60,10 @@ public class SqlCreateTableHandler implements Handler<SqlCreateTable> {
         final String db = dbAndTablePair.getLeft();
         final String tableName = dbAndTablePair.getRight();
 
-        final SlothSchema slothSchema = SlothSchemaHolder.INSTANCE.getSlothSchema(db);
-        final SlothTable slothTable = new SlothTable(slothSchema);
-        slothTable.setTableName(tableName);
-
         final List<SqlNode> nodes = sqlNodes.getList();
         final int size = nodes.size();
 
-        final List<SlothColumn> slothColumns = Lists.newArrayList();
+        final List<CreateColumnDefinition> columns = Lists.newArrayList();
         final Set<String> columnNames = new HashSet<>();
         for (int i = 0; i < size / 2; i++) {
             final String columnName = nodes.get(2 * i).toString();
@@ -75,26 +75,20 @@ public class SqlCreateTableHandler implements Handler<SqlCreateTable> {
                 return;
             }
             final SlothColumnType sqlTypeName = (SlothColumnType) nodes.get(2 * i + 1);
-            final EnhanceSlothColumn column = sqlTypeName.toEnhance(columnName);
-            final SlothColumn slothColumn = new SlothColumn(columnName, column);
-
-            slothColumns.add(slothColumn);
+            columns.add(sqlTypeName.toColumnDefinition(columnName));
         }
 
-        slothTable.setShardNum(sqlCreateTable.getShard());
-        slothTable.setColumns(slothColumns);
-        slothTable.setEngineName(SlothTable.DEFAULT_ENGINE_NAME);
-
+        String engineName = SlothTable.DEFAULT_ENGINE_NAME;
         if (Objects.nonNull(sqlCreateTable.getEngine())) {
-            slothTable.setEngineName(sqlCreateTable.getEngine());
+            engineName = sqlCreateTable.getEngine();
         }
-
+        String tableComment = null;
         if (Objects.nonNull(sqlCreateTable.getTableComment())) {
-            slothTable.setTableComment(sqlCreateTable.getTableComment().toString());
+            tableComment = sqlCreateTable.getTableComment().toString();
         }
-
-        slothTable.initTableEngine();
-        slothSchema.addTable(tableName, slothTable);
+        CatalogService.INSTANCE.createTable(new CreateTableDefinition(
+                db, tableName, columns, sqlCreateTable.getShard(),
+                engineName, tableComment));
 
         final MysqlPackage result =
                 PackageUtils.buildOkMySqlPackage(0, 1, 0);
@@ -113,12 +107,11 @@ public class SqlCreateTableHandler implements Handler<SqlCreateTable> {
             return new ErrorMessage(NO_DATABASE_SELECTED.getCode(), NO_DATABASE_SELECTED.getMessage());
         }
 
-        final SlothSchema slothSchema = SlothSchemaHolder.INSTANCE.getSlothSchema(realDb);
-        if (Objects.isNull(slothSchema)) {
+        if (!CatalogService.INSTANCE.databaseExists(realDb)) {
             return new ErrorMessage(UNKNOWN_DB_NAME.getCode(), String.format(UNKNOWN_DB_NAME.getMessage(), realDb));
         }
 
-        if (slothSchema.containsTable(tableName)) {
+        if (CatalogService.INSTANCE.tableExists(realDb, tableName)) {
             if (isNotExist) {
                 return ErrorMessage.OK_MESSAGE_AND_RETURN;
             } else {
