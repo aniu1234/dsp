@@ -6,7 +6,11 @@ import com.qinyadan.system.dsp.core.data.value.Value;
 import com.qinyadan.system.dsp.core.util.StringUtil;
 import com.qinyadan.system.dsp.engine.service.CatalogService;
 import com.qinyadan.system.dsp.engine.service.WriteService;
+import com.qinyadan.system.dsp.engine.service.WriteErrorCode;
+import com.qinyadan.system.dsp.engine.service.WriteServiceException;
 import com.qinyadan.system.dsp.engine.service.dto.WriteColumn;
+import com.qinyadan.system.dsp.engine.service.dto.WriteOutcome;
+import com.qinyadan.system.dsp.engine.service.dto.WriteRequest;
 import com.qinyadan.system.dsp.engine.service.dto.WriteTable;
 import com.qinyadan.system.dsp.protocol.pkg.MysqlPackage;
 import com.qinyadan.system.dsp.protocol.pkg.netty.ConnectionContext;
@@ -26,12 +30,18 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static com.qinyadan.system.dsp.constant.ErrorCodeAndMessageEnum.*;
 
 
 @Slf4j
 public class SqlInsertHandler implements Handler<SqlInsert> {
+
+    private static final Pattern IDEMPOTENCY_HINT = Pattern.compile(
+            "/\\*\\s*dsp:idempotency-key\\s*=\\s*([^*]+?)\\s*\\*/",
+            Pattern.CASE_INSENSITIVE);
 
     public static final SqlInsertHandler INSTANCE = new SqlInsertHandler();
 
@@ -83,7 +93,16 @@ public class SqlInsertHandler implements Handler<SqlInsert> {
             return;
         }
 
-        WriteResult writeResult = WriteService.INSTANCE.insert(db, tableName, valueList);
+        WriteResult writeResult;
+        try {
+            WriteOutcome outcome = WriteService.INSTANCE.insert(new WriteRequest(
+                    db, tableName, valueList,
+                    idempotencyKey(connectionContext.getQueryString())));
+            writeResult = outcome.getResult();
+        } catch (WriteServiceException e) {
+            writeServiceError(connectionContext, e);
+            return;
+        }
 
         final MysqlPackage r = PackageUtils.buildOkMySqlPackage(
                 writeResult.getInserted(), 1, 0);
@@ -336,6 +355,40 @@ public class SqlInsertHandler implements Handler<SqlInsert> {
                     String.format(INCORRECT_COLUMN_VALUE.getMessage(), value, column, row));
         }
         connectionContext.write(mysqlPackage);
+    }
+
+    private String idempotencyKey(String sql) {
+        if (sql == null) {
+            return null;
+        }
+        Matcher matcher = IDEMPOTENCY_HINT.matcher(sql);
+        return matcher.find() ? matcher.group(1).trim() : null;
+    }
+
+    private void writeServiceError(ConnectionContext context, WriteServiceException error) {
+        if (error.getErrorCode() == WriteErrorCode.IDEMPOTENCY_CONFLICT) {
+            context.write(PackageUtils.buildErrPackage(
+                    IDEMPOTENCY_CONFLICT.getCode(),
+                    String.format(IDEMPOTENCY_CONFLICT.getMessage(),
+                            idempotencyKey(context.getQueryString()))));
+        } else if (error.getErrorCode() == WriteErrorCode.RESOURCE_LIMIT) {
+            context.write(PackageUtils.buildErrPackage(
+                    WRITE_RESOURCE_LIMIT.getCode(),
+                    String.format(WRITE_RESOURCE_LIMIT.getMessage(), error.getMessage())));
+        } else if (error.getErrorCode() == WriteErrorCode.UNKNOWN_TABLE) {
+            context.write(PackageUtils.buildErrPackage(
+                    TABLE_NOT_EXISTS.getCode(),
+                    String.format(TABLE_NOT_EXISTS.getMessage(), error.getMessage())));
+        } else if (error.getErrorCode() == WriteErrorCode.STORAGE_FAILURE) {
+            context.write(PackageUtils.buildErrPackage(
+                    INTERNAL_ERROR.getCode(),
+                    String.format(INTERNAL_ERROR.getMessage(), error.getMessage())));
+        } else {
+            context.write(PackageUtils.buildErrPackage(
+                    INCORRECT_COLUMN_VALUE.getCode(),
+                    String.format(INCORRECT_COLUMN_VALUE.getMessage(),
+                            "batch", "unknown", 1)));
+        }
     }
 
 }

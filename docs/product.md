@@ -69,7 +69,11 @@ Catalog 与表数据在进程重启后恢复。DDL 失败时会尝试回滚内�
 - 整条 INSERT 在进入存储前完成转换与校验；
 - 单条 INSERT 的全部行路由到同一分片，保留存储批次原子边界；
 - 返回实际写入行数；
-- 可配置同步 flush 和单次 INSERT 最大行数。
+- 可配置同步 flush 和单次 INSERT 最大行数；
+- 可通过 `/* dsp:idempotency-key=<key> */` 注释携带进程内幂等键；相同键和相同批次
+  返回首次结果且不重复写入，相同键对应不同批次时返回冲突错误。
+
+幂等记录是有界、带过期时间的进程内缓存，目前不跨重启持久化，也不跨节点共享。
 
 当前不支持 `INSERT ... SELECT`、`UPDATE`、`DELETE`、UPSERT、唯一键约束和跨语句事务。
 系统会明确拒绝 `BEGIN`、`COMMIT`、`ROLLBACK` 和 `START TRANSACTION`，不会模拟成功。
@@ -101,6 +105,8 @@ SQL 兼容性以项目测试覆盖为准，不应假设支持完整 MySQL 方言
 | `DSP_QUERY_MAX_RESULT_ROWS` | `100000` | 单次查询最多返回行数 |
 | `DSP_QUERY_MAX_MATERIALIZED_ROWS` | `100000` | 排序、JOIN 构建侧、聚合和去重最大内存条目数 |
 | `DSP_WRITE_MAX_ROWS_PER_INSERT` | `10000` | 单条 INSERT 最大行数 |
+| `DSP_WRITE_IDEMPOTENCY_TTL_MS` | `300000` | 写入幂等键保留时间 |
+| `DSP_WRITE_IDEMPOTENCY_MAX_KEYS` | `10000` | 进程内最多保留的幂等键数量 |
 | `DSP_STORAGE_SCAN_PAGE_SIZE` | `512` | Lucene 单次扫描页大小 |
 | `DSP_STORAGE_SYNC_WRITES` | `true` | INSERT 成功响应前是否 flush |
 
@@ -172,8 +178,14 @@ SHOW TABLES;
 SHOW CREATE TABLE users;
 ```
 
-当前版本没有独立管理控制台、指标接口和在线备份命令。运行状态主要通过进程日志、
-客户端错误码、数据目录和 Maven 测试结果检查。
+```sql
+SHOW DSP HEALTH;
+SHOW DSP METRICS;
+```
+
+健康检查返回 Catalog、表、存储实例和只读实例数量；指标返回查询/写入成功与失败次数、
+处理行数、幂等重放次数和进程运行时间。指标目前只保存在当前进程内，重启后重新计数。
+当前版本仍没有独立管理控制台、在线备份命令或外部指标采集协议。
 
 ## 5. 部署与配置
 
@@ -231,17 +243,18 @@ SHOW CREATE TABLE users;
 
 ## 8. 产品路线图
 
-### P1：稳定服务边界
+### P1：稳定服务边界（已完成）
 
-- Query/Catalog 服务 DTO 化，减少 Calcite 类型向协议层泄露；
-- 完善 `WriteService` 错误模型、幂等键和 statement/batch 原子性契约；
-- 增加统一配置对象和启动时配置校验；
-- 增加服务健康检查与基础运行指标。
+- Query/Catalog 主响应 DTO 化，SELECT、EXPLAIN 和 SHOW CREATE 不再暴露执行计划或表对象；
+- 增加 `WriteService` 结构化错误、不可变批次、进程内幂等键和 statement/batch 原子契约；
+- 增加统一的 `DspConfiguration` 配置解析与启动校验；
+- 增加 `SHOW DSP HEALTH` 和 `SHOW DSP METRICS`。
 
 ### P2：完善单节点数据库能力
 
 - 增加 UPDATE、DELETE 和更多数据类型；
 - 明确并实现事务模型；
+- 将幂等记录升级为可持久化、可跨节点协调的提交记录；
 - 增加索引、约束和统计信息管理；
 - 增加备份、恢复和数据迁移工具。
 

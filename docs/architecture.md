@@ -86,15 +86,21 @@ dsp-protocol ───────────────> dsp-engine ───
    类型、非空、无符号和长度复核，再调用表存储引擎。
 6. **建表请求 DTO 化**：协议层提交框架无关的 `CreateTableDefinition`，目录服务负责构造
    Calcite 表对象和存储生命周期，减少内部对象向适配层泄露。
+7. **P1 查询/Catalog 响应 DTO 化**：SELECT 使用 `QueryExecution`，EXPLAIN 返回计划文本，
+   SHOW CREATE 使用 `TableDescription`，协议层不再接触 `RelNode`、`SlothRel` 或 `SlothTable`。
+8. **统一运行配置**：端口、认证、数据目录、查询/写入限制、幂等缓存、存储与元数据库
+   配置统一由 `DspConfiguration` 解析；服务启动前执行完整校验。
+9. **基础可观测性**：`HealthService` 检查数据目录和存储只读状态，`RuntimeMetrics` 记录
+   查询/写入计数和行数，并通过 MySQL 命令暴露只读快照。
 
 ### 下一阶段（按优先级）
 
-1. **查询与目录响应 DTO 化**：移除 `QueryService`、SHOW/EXPLAIN 路径中残留的 Calcite、
-   `SlothSchema`、`SlothTable` 返回类型；建表和写入入口已经先行 DTO 化。
+1. **语句分发 DTO 化**：当前 SELECT、EXPLAIN、SHOW 和写入响应已经隔离内部对象；下一步
+   继续移除通用命令分发路径中的 `SqlNode` 暴露。
 2. **统一 connector 接入方式**：在应用装配层消费 `SchemaConnectorRegistry` 的健康状态，
    将外部 Schema 作为 Catalog 的只读数据源接入，而不是让主链依赖具体 connector。
-3. **明确事务能力边界**：继续为 `WriteService` 定义幂等键、提交日志和跨分片事务语义；
-   在此之前保持 statement/batch 原子边界，并继续显式拒绝事务命令。
+3. **持久化提交契约**：把当前进程内有界幂等缓存升级为提交日志，再定义跨重启、跨节点
+   幂等和跨分片事务语义；在此之前保持 statement/batch 原子边界并拒绝事务命令。
 4. **控制面通过端口接入**：为节点注册、拓扑和领导者状态定义 engine-neutral 接口，
    由应用层适配 `dsp-raft` / `dsp-register`，禁止查询引擎反向依赖集群实现。
 5. **拆分部署保持可选**：当前先维持单进程模块化，只有当资源隔离、独立伸缩或故障域

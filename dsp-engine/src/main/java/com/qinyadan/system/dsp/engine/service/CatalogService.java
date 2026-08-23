@@ -8,6 +8,8 @@ import com.qinyadan.system.dsp.engine.calcite.SlothTable;
 import com.qinyadan.system.dsp.engine.calcite.EnhanceSlothColumn;
 import com.qinyadan.system.dsp.engine.service.dto.CreateColumnDefinition;
 import com.qinyadan.system.dsp.engine.service.dto.CreateTableDefinition;
+import com.qinyadan.system.dsp.engine.service.dto.ColumnDescription;
+import com.qinyadan.system.dsp.engine.service.dto.TableDescription;
 import org.apache.calcite.sql.type.SqlTypeName;
 
 import java.util.ArrayList;
@@ -48,11 +50,11 @@ public final class CatalogService implements LifeCycle {
         return schemas.contains(database);
     }
 
-    public SlothSchema getSchema(String database) {
+    SlothSchema getSchema(String database) {
         return schemas.getSlothSchema(database);
     }
 
-    public SlothTable getTable(String database, String table) {
+    SlothTable getTable(String database, String table) {
         SlothSchema schema = getSchema(database);
         return schema == null ? null : (SlothTable) schema.getTable(table);
     }
@@ -67,6 +69,23 @@ public final class CatalogService implements LifeCycle {
         return schema != null && schema.containsTable(table);
     }
 
+    public TableDescription describeTable(String database, String tableName) {
+        SlothTable table = getTable(database, tableName);
+        if (table == null) {
+            return null;
+        }
+        List<ColumnDescription> columns = new ArrayList<>(table.getColumns().size());
+        for (SlothColumn column : table.getColumns()) {
+            EnhanceSlothColumn definition = column.getColumnType();
+            columns.add(new ColumnDescription(column.getColumnName(),
+                    definition.getColumnType().getName(), definition.isUnsigned(),
+                    definition.isNullable(), definition.getDefalutValue(),
+                    definition.getColumnComment(), definition.getPrecision()));
+        }
+        return new TableDescription(database, tableName, columns,
+                table.getEngineName(), table.getShardNum(), table.getTableComment());
+    }
+
     public void createDatabase(String database) {
         schemas.registerSchema(database);
     }
@@ -75,7 +94,7 @@ public final class CatalogService implements LifeCycle {
         return schemas.removeSchema(database);
     }
 
-    public SlothTable createTable(CreateTableDefinition definition) {
+    public TableDescription createTable(CreateTableDefinition definition) {
         SlothSchema schema = getSchema(definition.getDatabase());
         if (schema == null) {
             throw new IllegalArgumentException(
@@ -100,7 +119,7 @@ public final class CatalogService implements LifeCycle {
         table.setEngineName(definition.getEngine());
         table.setTableComment(definition.getComment());
         schema.addTable(definition.getTable(), table);
-        return table;
+        return describeTable(definition.getDatabase(), definition.getTable());
     }
 
     public boolean dropTable(String database, String table) {

@@ -70,6 +70,11 @@ public enum ErrorCodeAndMessageEnum {
     COLUMN_EXIST_TWICE(1110, "Column '%s' specified twice"),
 
     /**
+     * The same idempotency key was reused with a different write payload.
+     */
+    IDEMPOTENCY_CONFLICT(1062, "Idempotency key '%s' was already used with a different payload"),
+
+    /**
      * insert into student(h,t) values(1); will encounter this problem
      */
     COLUMN_COUNT_NOT_MATCH(1136, "Column count doesn't match value count at row %s"),

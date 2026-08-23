@@ -64,6 +64,9 @@ export DSP_STORAGE_SCAN_PAGE_SIZE='512'
 export DSP_STORAGE_SYNC_WRITES='true'
 # 单条 INSERT 最大行数
 export DSP_WRITE_MAX_ROWS_PER_INSERT='10000'
+# 幂等键默认保留 5 分钟，最多保留 10000 个
+export DSP_WRITE_IDEMPOTENCY_TTL_MS='300000'
+export DSP_WRITE_IDEMPOTENCY_MAX_KEYS='10000'
 ```
 
 在IDE中找到`FrontEndMain`, 直接启动main函数即可
@@ -85,7 +88,21 @@ mysql -h127.0.0.1 -uroot -p -P3016 --ssl-mode=disabled
 
 当前服务器不宣告事务能力，`BEGIN`/`COMMIT`/`ROLLBACK` 会返回明确的不支持错误。
 
+启动时会统一校验端口、认证、资源限制、存储和元数据库配置；认证缺失、范围非法或
+元数据库配置不完整时直接终止启动。
+
 #### 3.2 使用范例
 
+```sql
+CREATE DATABASE demo;
+USE demo;
+CREATE TABLE users (id INTEGER NOT NULL, name VARCHAR(32)) ENGINE = lucene;
+
+INSERT INTO users(id, name) VALUES (1, 'Alice')
+/* dsp:idempotency-key=create-user-1 */;
+
+SHOW DSP HEALTH;
+SHOW DSP METRICS;
+```
 
  

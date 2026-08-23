@@ -192,6 +192,21 @@ public class SqlEndToEndTest {
         } finally {
             restoreProperty("dsp.write.max-rows-per-insert", previousWriteLimit);
         }
+
+        String idempotentInsert = "INSERT INTO users(id, name) VALUES (9, 'once') "
+                + "/* dsp:idempotency-key=users-9 */";
+        assertOk(execute(idempotentInsert));
+        assertOk(execute(idempotentInsert));
+        assertEquals(Arrays.asList(Arrays.asList("9", "once")),
+                resultRows(execute("SELECT id, name FROM users WHERE id = 9"), 2));
+        assertEquals(1062, errorCode(execute(
+                "INSERT INTO users(id, name) VALUES (10, 'conflict') "
+                        + "/* dsp:idempotency-key=users-9 */")));
+
+        List<List<String>> health = resultRows(execute("SHOW DSP HEALTH"), 7);
+        assertEquals("UP", health.get(0).get(0));
+        List<List<String>> metrics = resultRows(execute("SHOW DSP METRICS"), 2);
+        assertTrue(metrics.stream().anyMatch(row -> "idempotent_replays".equals(row.get(0))));
         assertEquals(1235, errorCode(execute("BEGIN")));
         assertEquals(1235, errorCode(execute("SELECT @@not_a_dsp_variable")));
     }

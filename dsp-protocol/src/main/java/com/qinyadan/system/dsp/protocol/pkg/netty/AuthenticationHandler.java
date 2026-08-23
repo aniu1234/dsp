@@ -1,5 +1,6 @@
 package com.qinyadan.system.dsp.protocol.pkg.netty;
 
+import com.qinyadan.system.dsp.core.config.DspConfiguration;
 import com.qinyadan.system.dsp.protocol.command.sqlnode.SqlUseHandler;
 import com.qinyadan.system.dsp.constant.ErrorCodeAndMessageEnum;
 import com.qinyadan.system.dsp.protocol.pkg.MysqlPackage;
@@ -97,8 +98,9 @@ public class AuthenticationHandler extends ChannelInboundHandlerAdapter {
      * @return
      */
     private boolean compareUsernameAndPassword(String userName, byte[] passwordHash, byte[] challenge) {
-        String configuredUser = config("dsp.auth.username", "DSP_AUTH_USERNAME");
-        String configuredPassword = config("dsp.auth.password", "DSP_AUTH_PASSWORD");
+        DspConfiguration configuration = DspConfiguration.load();
+        String configuredUser = configuration.getAuthUsername();
+        String configuredPassword = configuration.getAuthPassword();
         if (configuredUser == null || configuredPassword == null) {
             if (MISSING_CONFIG_LOGGED.compareAndSet(false, true)) {
                 log.warn("Authentication is not configured; set DSP_AUTH_USERNAME and DSP_AUTH_PASSWORD");
@@ -109,8 +111,4 @@ public class AuthenticationHandler extends ChannelInboundHandlerAdapter {
                 && MysqlNativePassword.matches(configuredPassword, challenge, passwordHash);
     }
 
-    private static String config(String propertyName, String environmentName) {
-        String value = System.getProperty(propertyName);
-        return value == null ? System.getenv(environmentName) : value;
-    }
 }

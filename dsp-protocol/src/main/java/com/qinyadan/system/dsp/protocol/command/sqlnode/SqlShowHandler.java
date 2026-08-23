@@ -8,9 +8,10 @@ import com.qinyadan.system.dsp.protocol.pkg.netty.ConnectionContext;
 import com.qinyadan.system.dsp.protocol.utils.PackageUtils;
 import com.qinyadan.system.dsp.engine.ShowEnum;
 import com.qinyadan.system.dsp.core.util.StringUtil;
-import com.qinyadan.system.dsp.engine.calcite.*;
 import com.qinyadan.system.dsp.engine.parser.ddl.SqlShow;
 import com.qinyadan.system.dsp.engine.service.CatalogService;
+import com.qinyadan.system.dsp.engine.service.dto.ColumnDescription;
+import com.qinyadan.system.dsp.engine.service.dto.TableDescription;
 import io.netty.buffer.ByteBuf;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -21,7 +22,6 @@ import java.util.stream.Collectors;
 
 import static com.qinyadan.system.dsp.constant.ColumnTypeConstants.MYSQL_TYPE_VAR_STRING;
 import static com.qinyadan.system.dsp.constant.ErrorCodeAndMessageEnum.*;
-import static com.qinyadan.system.dsp.engine.calcite.SlothTable.DEFAULT_ENGINE_NAME;
 
 
 public class SqlShowHandler implements Handler<SqlShow> {
@@ -129,8 +129,8 @@ public class SqlShowHandler implements Handler<SqlShow> {
             return new ShowCreateTableResult(true, null, null, mysqlPackage);
         }
 
-        final SlothTable slothTable = CatalogService.INSTANCE.getTable(db, tableName);
-        if (Objects.isNull(slothTable)) {
+        final TableDescription table = CatalogService.INSTANCE.describeTable(db, tableName);
+        if (Objects.isNull(table)) {
             mysqlPackage = PackageUtils.buildErrPackage(
                     TABLE_NOT_EXISTS.getCode(),
                     String.format(TABLE_NOT_EXISTS.getMessage(), tableNameDatabase));
@@ -139,42 +139,44 @@ public class SqlShowHandler implements Handler<SqlShow> {
 
         //now start to get re
         final String[] columnNames = {CREATE_TABLE_RESULT_COLUMN1, CREATE_TABLE_RESULT_COLUMN2};
-        final List<String> datas = Lists.newArrayList(tableName, buildCreateTableSql(slothTable));
+        final List<String> datas = Lists.newArrayList(tableName, buildCreateTableSql(table));
 
         return new ShowCreateTableResult(false, columnNames, datas, mysqlPackage);
     }
 
-    private String buildCreateTableSql(SlothTable slothTable) {
+    private String buildCreateTableSql(TableDescription table) {
 
         final StringBuilder builder = new StringBuilder();
 
-        builder.append("CREATE TABLE `").append(slothTable.getTableName()).append("` (\n");
+        builder.append("CREATE TABLE `").append(table.getTable()).append("` (\n");
 
         //column
-        final List<SlothColumn> columns = slothTable.getColumns();
+        final List<ColumnDescription> columns = table.getColumns();
         final int length = columns.size();
         for (int i = 0; i < length; i++) {
-            final SlothColumn column = columns.get(i);
+            final ColumnDescription column = columns.get(i);
 
-            final EnhanceSlothColumn columnType = column.getColumnType();
+            builder.append("  `").append(column.getName()).append("` ");
+            builder.append(column.getSqlType().toLowerCase()).append(" ");
 
-            builder.append("  `").append(column.getColumnName()).append("` ");
-            builder.append(columnType.getColumnType().getName().toLowerCase()).append(" ");
+            if (column.getPrecision() > 0) {
+                builder.append("(").append(column.getPrecision()).append(") ");
+            }
 
-            if (columnType.isUnsigned()) {
+            if (column.isUnsigned()) {
                 builder.append("unsigned ");
             }
 
-            if (!columnType.isNullable()) {
+            if (!column.isNullable()) {
                 builder.append("NOT NULL ");
             }
 
-            if (Objects.nonNull(columnType.getDefalutValue())) {
-                builder.append("DEFAULT ").append(columnType.getDefalutValue()).append(" ");
+            if (Objects.nonNull(column.getDefaultValue())) {
+                builder.append("DEFAULT ").append(column.getDefaultValue()).append(" ");
             }
 
-            if (StringUtils.isNotBlank(columnType.getColumnComment())) {
-                builder.append("COMMENT ").append(columnType.getColumnComment());
+            if (StringUtils.isNotBlank(column.getComment())) {
+                builder.append("COMMENT ").append(column.getComment());
             }
 
             if (i != length - 1) {
@@ -187,14 +189,14 @@ public class SqlShowHandler implements Handler<SqlShow> {
         builder.append(") ");
 
         //table property
-        String engineName = slothTable.getEngineName();
+        String engineName = table.getEngine();
         if (Objects.isNull(engineName)) {
-            engineName = DEFAULT_ENGINE_NAME;
+            engineName = "lucene";
         }
         builder.append("ENGINE = ").append(engineName).append(" ");
 
-        builder.append("SHARD = ").append(slothTable.getShardNum()).append(" ");
-        final String tableComment = slothTable.getTableComment();
+        builder.append("SHARD = ").append(table.getShards()).append(" ");
+        final String tableComment = table.getComment();
         if (StringUtils.isNotBlank(tableComment)) {
             builder.append("COMMENT = ").append(tableComment);
         }

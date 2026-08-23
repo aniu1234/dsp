@@ -4,6 +4,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.qinyadan.system.dsp.core.data.Row;
 import com.qinyadan.system.dsp.core.data.RowImpl;
+import com.qinyadan.system.dsp.core.config.DspConfiguration;
 import com.qinyadan.system.dsp.core.data.type.DataType;
 import com.qinyadan.system.dsp.core.data.value.Value;
 import com.qinyadan.system.dsp.engine.LifeCycle;
@@ -275,11 +276,6 @@ public class SlothTableEngine implements LifeCycle {
     }
 
     private boolean synchronousWrites() {
-        String configured = System.getProperty("dsp.storage.sync-writes");
-        if (configured == null || configured.trim().isEmpty()) {
-            configured = System.getenv("DSP_STORAGE_SYNC_WRITES");
-        }
-        return configured == null || configured.trim().isEmpty()
-                || Boolean.parseBoolean(configured);
+        return DspConfiguration.load().isStorageSynchronousWrites();
     }
 }

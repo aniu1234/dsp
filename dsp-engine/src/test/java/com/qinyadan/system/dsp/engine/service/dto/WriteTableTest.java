@@ -1,12 +1,17 @@
 package com.qinyadan.system.dsp.engine.service.dto;
 
 import com.qinyadan.system.dsp.core.data.type.DataTypes;
+import com.qinyadan.system.dsp.core.data.value.Value;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 
 public class WriteTableTest {
 
@@ -28,5 +33,30 @@ public class WriteTableTest {
                 new WriteColumn("id", DataTypes.INTEGER, false, false, 0, null)));
 
         table.getColumns().clear();
+    }
+
+    @Test
+    public void writeRequestDefensivelyCopiesRowsAndPreservesNullInput() {
+        List<Value> sourceRow = new ArrayList<>(Collections.singletonList(
+                new Value(1, DataTypes.INTEGER)));
+        List<List<Value>> sourceRows = new ArrayList<>(Collections.singletonList(sourceRow));
+        WriteRequest request = new WriteRequest("app", "users", sourceRows, "request-1");
+
+        sourceRow.clear();
+        sourceRows.clear();
+
+        assertEquals(1, request.getRows().size());
+        assertEquals(1, request.getRows().get(0).size());
+        assertEquals("request-1", request.getIdempotencyKey());
+        assertNull(new WriteRequest("app", "users", null, null).getRows());
+    }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void writeRequestRowsAreImmutable() {
+        WriteRequest request = new WriteRequest("app", "users",
+                Collections.singletonList(Collections.singletonList(
+                        new Value(1, DataTypes.INTEGER))), null);
+
+        request.getRows().get(0).clear();
     }
 }

@@ -1,5 +1,6 @@
 package com.qinyadan.system.dsp.storage.api.service;
 
+import com.qinyadan.system.dsp.core.config.DspConfiguration;
 import com.qinyadan.system.dsp.storage.api.EngineConfig;
 import com.qinyadan.system.dsp.storage.api.EngineRegistry;
 import com.qinyadan.system.dsp.storage.api.StorageEngine;
@@ -10,7 +11,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -108,13 +108,6 @@ public class StorageManager implements AutoCloseable {
     }
 
     private static Path defaultStorageRoot() {
-        String configured = System.getProperty("dsp.data.dir");
-        if (configured == null || configured.trim().isEmpty()) {
-            configured = System.getenv("DSP_DATA_DIR");
-        }
-        if (configured == null || configured.trim().isEmpty()) {
-            configured = Paths.get(System.getProperty("user.home"), "test", "sloth").toString();
-        }
-        return Paths.get(configured);
+        return DspConfiguration.load().getDataDirectory();
     }
 }

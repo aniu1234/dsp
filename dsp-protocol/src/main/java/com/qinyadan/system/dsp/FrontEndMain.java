@@ -1,6 +1,7 @@
 package com.qinyadan.system.dsp;
 
 import com.google.common.base.Throwables;
+import com.qinyadan.system.dsp.core.config.DspConfiguration;
 import com.qinyadan.system.dsp.protocol.config.ConnectionConfig;
 import com.qinyadan.system.dsp.protocol.pkg.netty.AuthenticationHandler;
 import com.qinyadan.system.dsp.protocol.pkg.netty.ByteBufToPackageDecoder;
@@ -28,7 +29,8 @@ public class FrontEndMain {
 
     public static void main(String[] args) {
 
-        int port = getServerPort();
+        DspConfiguration configuration = DspConfiguration.load().validateServer();
+        int port = configuration.getServerPort();
 
         LifeCycleInstance.start();
         final EventLoopGroup boss = new NioEventLoopGroup(1);
@@ -103,22 +105,4 @@ public class FrontEndMain {
         }
     }
 
-    private static int getServerPort() {
-        String configured = System.getProperty("dsp.server.port");
-        if (configured == null || configured.trim().isEmpty()) {
-            configured = System.getenv("DSP_SERVER_PORT");
-        }
-        if (configured == null || configured.trim().isEmpty()) {
-            return 3016;
-        }
-        try {
-            int port = Integer.parseInt(configured.trim());
-            if (port < 1 || port > 65535) {
-                throw new IllegalArgumentException("Port must be between 1 and 65535: " + port);
-            }
-            return port;
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Invalid DSP server port: " + configured, e);
-        }
-    }
 }

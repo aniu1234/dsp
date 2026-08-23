@@ -10,9 +10,6 @@ import com.qinyadan.system.dsp.protocol.visitor.EnvironmentReplaceVisitor;
 import com.qinyadan.system.dsp.engine.service.QueryService;
 import io.netty.buffer.ByteBuf;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.calcite.plan.RelOptUtil;
-import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.sql.SqlExplainLevel;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.commons.lang3.StringUtils;
 
@@ -35,9 +32,9 @@ public class ExplainHandler extends BaseHandler {
         ByteBuf result;
         try {
             final SqlNode sqlNode = QueryService.INSTANCE.parse(query, connectionContext.getDb());
-            final RelNode relNode = QueryService.INSTANCE.plan(query, connectionContext.getDb(),
+            final String planString = QueryService.INSTANCE.explain(query,
+                    connectionContext.getDb(),
                     sqlNode.accept(new EnvironmentReplaceVisitor(connectionContext)));
-            final String planString = StringConstants.LINE_SEPARATOR + RelOptUtil.toString(relNode, SqlExplainLevel.ALL_ATTRIBUTES);
             final List<List<String>> data = Lists.newArrayList();
             data.add(Lists.newArrayList(planString));
 

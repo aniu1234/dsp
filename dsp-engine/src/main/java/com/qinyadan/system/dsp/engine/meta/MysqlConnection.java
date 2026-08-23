@@ -1,5 +1,6 @@
 package com.qinyadan.system.dsp.engine.meta;
 
+import com.qinyadan.system.dsp.core.config.DspConfiguration;
 import lombok.extern.slf4j.Slf4j;
 import org.jooq.DSLContext;
 import org.jooq.SQLDialect;
@@ -24,9 +25,10 @@ public class MysqlConnection {
     private DSLContext dslContext;
 
     public MysqlConnection() {
-        addr = config("dsp.meta.jdbc.url", "DSP_META_JDBC_URL");
-        username = config("dsp.meta.jdbc.username", "DSP_META_JDBC_USERNAME");
-        password = config("dsp.meta.jdbc.password", "DSP_META_JDBC_PASSWORD");
+        DspConfiguration configuration = DspConfiguration.load();
+        addr = configuration.getMetadataJdbcUrl();
+        username = configuration.getMetadataJdbcUsername();
+        password = configuration.getMetadataJdbcPassword();
 
         if (addr == null || addr.trim().isEmpty()) {
             log.info("Metadata database is disabled; set DSP_META_JDBC_URL to enable it");
@@ -49,12 +51,6 @@ public class MysqlConnection {
             isOk = false;
         }
     }
-
-    private static String config(String propertyName, String environmentName) {
-        String value = System.getProperty(propertyName);
-        return value == null ? System.getenv(environmentName) : value;
-    }
-
 
     public Connection getConnection() {
         try {

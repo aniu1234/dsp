@@ -1,5 +1,6 @@
 package com.qinyadan.system.dsp.storage.lucene;
 
+import com.qinyadan.system.dsp.core.config.DspConfiguration;
 import com.qinyadan.system.dsp.core.data.Row;
 import com.qinyadan.system.dsp.storage.api.StorageEngine;
 import com.qinyadan.system.dsp.storage.api.WriteResult;
@@ -240,22 +241,7 @@ public class LuceneStorageEngine implements StorageEngine {
     }
 
     private int scanPageSize() {
-        String configured = System.getProperty("dsp.storage.scan-page-size");
-        if (configured == null || configured.trim().isEmpty()) {
-            configured = System.getenv("DSP_STORAGE_SCAN_PAGE_SIZE");
-        }
-        if (configured == null || configured.trim().isEmpty()) {
-            return 512;
-        }
-        try {
-            int value = Integer.parseInt(configured);
-            if (value < 1 || value > 10000) {
-                throw new IllegalArgumentException("Scan page size must be between 1 and 10000");
-            }
-            return value;
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Invalid scan page size: " + configured, e);
-        }
+        return DspConfiguration.load().getStorageScanPageSize();
     }
 
     private final class PagedScanIterator implements Iterator<Row> {

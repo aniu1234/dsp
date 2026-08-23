@@ -1,6 +1,7 @@
 package com.qinyadan.system.dsp.protocol.command.sqlnode;
 
 import com.qinyadan.system.dsp.constant.ColumnTypeConstants;
+import com.qinyadan.system.dsp.core.config.DspConfiguration;
 import com.qinyadan.system.dsp.protocol.command.sepcial.SpecialSelectHolder;
 import com.qinyadan.system.dsp.protocol.pkg.ResultSetHolder;
 import com.qinyadan.system.dsp.protocol.pkg.ResultSetStreamWriter;
@@ -12,15 +13,17 @@ import com.qinyadan.system.dsp.engine.data.SlothRow;
 import com.qinyadan.system.dsp.core.data.value.Value;
 import com.qinyadan.system.dsp.engine.operator.Operator;
 import com.qinyadan.system.dsp.engine.operator.QueryResourceLimitException;
-import com.qinyadan.system.dsp.engine.rel.SlothRel;
 import com.qinyadan.system.dsp.engine.service.QueryService;
-import org.apache.calcite.rel.RelNode;
+import com.qinyadan.system.dsp.engine.service.RuntimeMetrics;
+import com.qinyadan.system.dsp.engine.service.dto.QueryExecution;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.Collections;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.qinyadan.system.dsp.constant.ErrorCodeAndMessageEnum.INTERNAL_ERROR;
@@ -43,16 +46,14 @@ public class SqlSelectHandler implements Handler<SqlNode> {
         }
 
         type = type.accept(new EnvironmentReplaceVisitor(connectionContext));
-        final RelNode relNode = QueryService.INSTANCE.plan(
+        final QueryExecution execution = QueryService.INSTANCE.prepare(
                 connectionContext.getQueryString(), connectionContext.getDb(), type);
-
-        final Operator<SlothRow> operator = ((SlothRel) relNode).implement();
-
-        final List<String> columnNames = relNode.getRowType().getFieldNames();
-        final List<Integer> rowTypes = relNode.getRowType()
-                .getFieldList()
-                .stream()
-                .map(f -> f.getType().getSqlTypeName())
+        final Operator<SlothRow> operator = execution.getOperator();
+        final List<String> columnNames = execution.getColumns().stream()
+                .map(column -> column.getName())
+                .collect(Collectors.toList());
+        final List<Integer> rowTypes = execution.getColumns().stream()
+                .map(column -> SqlTypeName.get(column.getSqlType()))
                 .map(ColumnTypeConstants::getMysqlType)
                 .collect(Collectors.toList());
 
@@ -79,20 +80,20 @@ public class SqlSelectHandler implements Handler<SqlNode> {
         RuntimeException failure = null;
         boolean openAttempted = false;
         long timeoutMillis = queryTimeoutMillis();
-        long deadline = timeoutMillis == 0 ? Long.MAX_VALUE
-                : System.nanoTime() + timeoutMillis * 1000000L;
+        long startedAt = System.nanoTime();
+        long timeoutNanos = TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
         int maximumRows = maxResultRows();
         int rowCount = 0;
         try {
             openAttempted = true;
             operator.open();
-            checkDeadline(deadline, timeoutMillis);
+            checkDeadline(startedAt, timeoutNanos, timeoutMillis);
             writer.start(metadata);
             SlothRow tmp;
             while (true) {
-                checkDeadline(deadline, timeoutMillis);
+                checkDeadline(startedAt, timeoutNanos, timeoutMillis);
                 tmp = operator.next();
-                checkDeadline(deadline, timeoutMillis);
+                checkDeadline(startedAt, timeoutNanos, timeoutMillis);
                 if (tmp == SlothRow.EOF_ROW) {
                     break;
                 }
@@ -124,8 +125,15 @@ public class SqlSelectHandler implements Handler<SqlNode> {
         }
         try {
             if (failure == null) {
-                writer.finish();
+                try {
+                    writer.finish();
+                } catch (RuntimeException finishError) {
+                    RuntimeMetrics.INSTANCE.queryFailed();
+                    throw finishError;
+                }
+                RuntimeMetrics.INSTANCE.querySucceeded(rowCount);
             } else {
+                RuntimeMetrics.INSTANCE.queryFailed();
                 writer.fail(errorFor(failure));
             }
         } finally {
@@ -133,8 +141,8 @@ public class SqlSelectHandler implements Handler<SqlNode> {
         }
     }
 
-    private void checkDeadline(long deadline, long timeoutMillis) {
-        if (System.nanoTime() > deadline) {
+    private void checkDeadline(long startedAt, long timeoutNanos, long timeoutMillis) {
+        if (timeoutMillis > 0 && System.nanoTime() - startedAt > timeoutNanos) {
             throw new QueryTimeoutException(timeoutMillis);
         }
     }
@@ -154,33 +162,11 @@ public class SqlSelectHandler implements Handler<SqlNode> {
     }
 
     private int maxResultRows() {
-        return positiveConfiguration("dsp.query.max-result-rows",
-                "DSP_QUERY_MAX_RESULT_ROWS", 100000, false);
+        return DspConfiguration.load().getQueryMaxResultRows();
     }
 
     private long queryTimeoutMillis() {
-        return positiveConfiguration("dsp.query.timeout-ms",
-                "DSP_QUERY_TIMEOUT_MS", 30000, true);
-    }
-
-    private int positiveConfiguration(String property, String environment,
-                                      int defaultValue, boolean zeroAllowed) {
-        String configured = System.getProperty(property);
-        if (configured == null || configured.trim().isEmpty()) {
-            configured = System.getenv(environment);
-        }
-        if (configured == null || configured.trim().isEmpty()) {
-            return defaultValue;
-        }
-        try {
-            int value = Integer.parseInt(configured);
-            if (value < 0 || (!zeroAllowed && value == 0)) {
-                throw new IllegalArgumentException("Invalid query limit: " + configured);
-            }
-            return value;
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Invalid query limit: " + configured, e);
-        }
+        return DspConfiguration.load().getQueryTimeoutMillis();
     }
 
     private static final class QueryTimeoutException extends RuntimeException {
